@@ -20,8 +20,6 @@ const byte _UPDATE_PORT = 80;
 const char* _UPDATE_URL = "/";
 const unsigned int _UPDATE_CHECK_INTERVAL = 300; // in seconds
 int _DEEPSLEEP_INTERVAL = 900; // in seconds
-const unsigned int _LED_HEARTBEAT_CLIENT = 5000; // in miliseconds
-const int _LED_HEARTBEAT_AP = 500; // in miliseconds
 const unsigned int _WATCHDOG_TIMEOUT = 600; // in seconds
 String _MQTT_SERVER;
 String _MQTT_SERVERPORT;
@@ -53,6 +51,8 @@ IPAddress _MASK(255, 255, 255, 0);
 IPAddress _GATE(0, 0, 0, 0);
 IPAddress timeServerIP;
 unsigned long reset_hold = 0;
+unsigned long switch_press = 0;
+bool switch_press_done=false;
 unsigned long blink_millis = 0;
 unsigned int mqtt_drop_count = 0;
 long last_update_check = 10000 - (_UPDATE_CHECK_INTERVAL * 1000);
@@ -60,15 +60,11 @@ volatile int watchdog_counter = 0;
 unsigned long mqtt_lastReconnectAttempt = 0;
 unsigned long wifi_lastReconnectAttempt = 0;
 unsigned long mqtt_last=0;
-unsigned long ntp_last=0;
 Ticker secondTick;
-//WiFiUDP ntp;
 ESP8266WebServer server(80);
 ESP8266HTTPUpdateServer httpUpdater;
 AsyncMqttClient mqttClient;
 DNSServer dnsServer;
-//char incomingPacket[255];  // buffer for incoming packets
-//int led = 1;
 unsigned int led_delay = 1;
 
 const char PAGE_favicon[] PROGMEM = R"=====(
@@ -172,7 +168,9 @@ fieldset legend {
   <fieldset>
   <legend>Безжична мрежа</legend>
     <label for="ssid">SSID:</label><br>
-    <input type="text" name="ssid" id="ssid" value=""><br>
+    <input type="text" name="ssid" id="ssid" value="" list="wifis"><br>
+    <datalist id="wifis">
+    </datalist>
     <label for="password">Парола:</label><br>
     <input type="text" name="password" id="password" value="">
   </fieldset>
@@ -195,7 +193,7 @@ fieldset legend {
   <div style="padding:2px;">
   <fieldset style="border: solid 1px #ff0000;">
   <legend>Важно</legend>
-  Моля, имайте предвид, че проверки за грешки на въведените данни не се правят! Ако въведете грешни данни може да се наложи да рестартирате устройството към заводски настройки чрез задържане на GPIO0 към маса за 5 секунди.
+  Моля, имайте предвид, че проверки за грешки на въведените данни не се правят! Ако въведете грешни данни може да се наложи да рестартирате устройството към заводски настройки чрез задържане на GPIO0 към маса за 10 секунди.
   </fieldset>
   <fieldset style="border: solid 1px #11ff00;">
   <legend>Статус</legend>
@@ -234,6 +232,10 @@ fieldset legend {
         if (data.hostname!="") document.getElementById("h2").textContent = data.hostname;
         if (data.hostname!="") document.getElementById("h3").textContent = data.hostname;
         if (data.hostname!="") document.title = data.hostname;
+        var opts='';
+        for(var w in data.wifis)
+          opts+='<option value="' + w. + '">' + w + ' [' + data.wifis[w] + '] </option>';
+        document.getElementById("wifis").innerHTML=opts;
       }
     };
     xhttp.open("GET", "/data", true);
@@ -362,6 +364,14 @@ bool loadConfig() {
 void get_data() {
   if ((!server.authenticate("admin", _ADMIN_PASS.c_str())) && (_CLIENT))
     server.requestAuthentication();
+    int w = WiFi.scanNetworks();
+    String wifis="{";
+    byte i;
+    for (i=0;i<w;i++) {
+      wifis+="\"" + WiFi.SSID(i) + "\":\"" + WiFi.RSSI(i) + "\"";
+      if (i<w-1) wifis+=", ";
+    }
+    wifis+="}";
     server.send ( 200, F("application/json"), \
       "{\"hostname\":\"" + String(_HOSTNAME) + "\", \
         \"ssid\":\"" + String(_SSID) + "\", \
@@ -376,7 +386,9 @@ void get_data() {
         \"version\":\"" + String(_VERSION) + "\", \
         \"rssi\":\"" + String(WiFi.RSSI()) + "\", \
         \"time\":\"" + NTP.getTimeDateString() + "\", \
-        \"vcc\":\"" + String(float(ESP.getVcc() / 1000.0)) + "\"}" );
+        \"vcc\":\"" + String(float(ESP.getVcc() / 1000.0)) + "\", \
+        \"wifis\":" + wifis + \ 
+        "}" );
 }
 
 void html_root(){
@@ -530,7 +542,7 @@ void wifi_connect() {
   if (_SSID == "") _SSID = _HOSTNAME;
   WiFi.hostname(_HOSTNAME);
   if (!_CLIENT) {
-    led_delay = _LED_HEARTBEAT_AP;
+    led_delay = 500;  //if in mode AP blink twice in a second
     Serial.printf("SSID: %s\r\n", _SSID.c_str());
     if (_PASS!="") Serial.printf("Парола: %s\r\n", _PASS.c_str());
     WiFi.mode(WIFI_AP);
@@ -540,7 +552,7 @@ void wifi_connect() {
     Serial.print(F("За да конфигурирате, моля закачете се за безжичната мрежа и отворете http://"));
     Serial.println(myIP.toString().c_str());
   } else {
-    led_delay = _LED_HEARTBEAT_CLIENT;
+    led_delay = 10000;  //if client - blink once every 10 seconds
     Serial.print(F("Опит за връзка с "));
     Serial.println(_SSID.c_str());
     WiFi.mode(WIFI_STA);
@@ -611,7 +623,7 @@ void setup()
       Serial.println(F("[OK] NTP..."));
     else
       Serial.println(F("[ERR] Инициализацията на NTP клиента не се получи."));
-    NTP.setInterval(3600);
+    NTP.setInterval(3600);  //ntp sync once per hour
   } else {
     dnsServer.setTTL(300);
     dnsServer.setErrorReplyCode(DNSReplyCode::ServerFailure);
@@ -625,17 +637,32 @@ void loop() {
   server.handleClient();
 
   // FACTORY RESET
-  int pin = digitalRead(_PIN_RESET);
-  if (pin == 0) {
-    if (reset_hold == 0) {
-      reset_hold = currentMillis;
-      Serial.println(F("!"));
-    }
-    if (currentMillis - reset_hold >= _LED_HEARTBEAT_CLIENT) {
+  if (digitalRead(_PIN_RESET) == 0) {
+    if (reset_hold == 0)
+      reset_hold = millis();
+    Serial.println(F("!"));
+    if (millis() - reset_hold >= 10000) {
+      digitalWrite(_PIN_LED, LOW);
+      delay(1000);
       handle_deleteconfig();
     }
   } else {
     reset_hold = 0;
+  }
+
+  // Switch PIN1 when reset pin is pressed
+  if (digitalRead(_PIN_RESET) == 0) {
+    if (switch_press == 0)
+      switch_press = millis();
+    Serial.println(F("!"));
+    if ((millis() - switch_press >= 100)and (!switch_press_done)) {
+      (digitalRead(_PIN1)==0)?(switchpin(_PIN1,1)):(switchpin(_PIN1,0));
+      mqttClient.publish(String(_HOSTNAME + "/status/pin1").c_str(), 1, true, String(digitalRead(_PIN1)).c_str());
+      switch_press_done=true;
+    }
+  } else {
+    reset_hold = 0;
+    switch_press_done=false;
   }
 
   //handle blinking frequency
@@ -643,12 +670,13 @@ void loop() {
     digitalWrite(_PIN_LED, LOW);
     blink_millis = currentMillis;
   }
-  if (currentMillis-blink_millis>1)
+  if (currentMillis-blink_millis>1) {
     digitalWrite(_PIN_LED, HIGH);
-    
+    blink_millis = currentMillis;
+  }    
 
-  //WiFi diagnostics
   if (_CLIENT) {
+    //handle disconnect event
     if (WiFi.status() == WL_DISCONNECTED) {
       Serial.println(F("[ERR] Wifi disconnected!"));
       WiFi.disconnect();
@@ -660,17 +688,40 @@ void loop() {
       last_update_check = currentMillis;
       checkforupdate();
     }
-
-    //ntp sync
-//    if ((millis() - ntp_last)/1000 >= 10) {
-//      ntp_last=millis();
-//      if (timeStatus()!=timeSet) {
-//        Serial.println(F("NTP retry..."));
-//      }
-//    }
-    
   } else {
     dnsServer.processNextRequest();
+  }
+
+  if (Serial.available()) {
+    char c = Serial.read();
+    if (c=='1') {
+      (digitalRead(_PIN1)==0)?(switchpin(_PIN1,1)):(switchpin(_PIN1,0));
+      mqttClient.publish(String(_HOSTNAME + "/status/pin1").c_str(), 1, true, String(digitalRead(_PIN1)).c_str());
+    }
+    if (c=='2') {
+      (digitalRead(_PIN2)==0)?(switchpin(_PIN2,1)):(switchpin(_PIN2,0));
+      mqttClient.publish(String(_HOSTNAME + "/status/pin2").c_str(), 1, true, String(digitalRead(_PIN2)).c_str());
+    }
+    if (c=='3') {
+      (digitalRead(_PIN3)==0)?(switchpin(_PIN3,1)):(switchpin(_PIN3,0));
+      mqttClient.publish(String(_HOSTNAME + "/status/pin3").c_str(), 1, true, String(digitalRead(_PIN3)).c_str());
+    }
+    if (c=='4') {
+      (digitalRead(_PIN4)==0)?(switchpin(_PIN4,1)):(switchpin(_PIN4,0));
+      mqttClient.publish(String(_HOSTNAME + "/status/pin4").c_str(), 1, true, String(digitalRead(_PIN4)).c_str());
+    }
+    if (c=='w') {
+      int w = WiFi.scanNetworks();
+      if (w == 0)
+        Serial.println("no wifi networks found");
+      byte i;
+      for (i=0;i<w;i++) {
+        Serial.print(WiFi.SSID(i));
+        Serial.print(F(" ["));
+        Serial.print(WiFi.RSSI(i));
+        Serial.println("dBi]");
+      }
+    }
   }
   watchdog_counter = 0;
 }
