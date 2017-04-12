@@ -234,7 +234,7 @@ fieldset legend {
         if (data.hostname!="") document.title = data.hostname;
         var opts='';
         for(var w in data.wifis)
-          opts+='<option value="' + w. + '">' + w + ' [' + data.wifis[w] + '] </option>';
+          opts+='<option value="' + w + '">' + w + ' [' + data.wifis[w] + '] </option>';
         document.getElementById("wifis").innerHTML=opts;
       }
     };
@@ -725,4 +725,3 @@ void loop() {
   }
   watchdog_counter = 0;
 }
-
