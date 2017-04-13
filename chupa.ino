@@ -41,7 +41,7 @@ String _SSID;
 String _PASS;
 String _ADMIN_PASS = "";
 bool _CLIENT = false; // dali e wifi client ili ap
-const byte _CHANNEL = random(1,13);
+const byte _CHANNEL = random(1, 13);
 const char* _CONFIG = "/config.json";
 const char* update_path = "/update";
 const char* update_username = "chupa";
@@ -52,14 +52,14 @@ IPAddress _GATE(0, 0, 0, 0);
 IPAddress timeServerIP;
 unsigned long reset_hold = 0;
 unsigned long switch_press = 0;
-bool switch_press_done=false;
+bool switch_press_done = false;
 unsigned long blink_millis = 0;
 unsigned int mqtt_drop_count = 0;
 long last_update_check = 10000 - (_UPDATE_CHECK_INTERVAL * 1000);
 volatile int watchdog_counter = 0;
 unsigned long mqtt_lastReconnectAttempt = 0;
 unsigned long wifi_lastReconnectAttempt = 0;
-unsigned long mqtt_last=0;
+unsigned long mqtt_last = 0;
 Ticker secondTick;
 ESP8266WebServer server(80);
 ESP8266HTTPUpdateServer httpUpdater;
@@ -114,6 +114,15 @@ input[type=text] {
   border-radius: 4px;
   color: #fff;
   margin:2px;
+  width: 150px;
+}
+select {
+  background-color: #000;
+  border: 1px solid #ffa600;
+  border-radius: 4px;
+  color: #fff;
+  margin:0;
+  width: 156px;
 }
 input[type=submit] {
   background-color: #ffa600;
@@ -152,60 +161,61 @@ fieldset legend {
 </style>
 
   </head><body>
-  <h3>Конфигурационни параметри</h3>
+  <h3>Configuration menu</h3>
   <div style="margin:10px; width: *; overflow:hidden;"><form action="/configure" method="post">
-  <fieldset>
-  <legend>Основни</legend>
-    <label for="hostname">Уникално име:</label><br>
+  <fieldset style="height:180px;">
+  <legend>General</legend>
+    <label for="hostname">Hostname:</label><br>
     <input type="text" name="hostname" id="hostname" value=""><br>
-    <label for="dmin_password">Админ парола:</label><br>
+    <label for="dmin_password">Admin password:</label><br>
     <input type="text" name="admin_password" id="admin_password" value=""><br>
-    <label for="ntp_server">NTP сървър:</label><br>
+    <label for="ntp_server">NTP server:</label><br>
     <input type="text" name="ntp_server" id="ntp_server" value=""><br>
-    <label for="timezone">Часова зона [UTC=0]:</label><br>
+    <label for="timezone">Timezone [UTC=0]:</label><br>
     <input type="text" name="timezone" id="timezone" value="">
   </fieldset>
-  <fieldset>
-  <legend>Безжична мрежа</legend>
+  <fieldset style="height:180px;">
+  <legend>Wifi network</legend>
     <label for="ssid">SSID:</label><br>
     <input type="text" name="ssid" id="ssid" value="" list="wifis"><br>
-    <datalist id="wifis">
-    </datalist>
-    <label for="password">Парола:</label><br>
+    <select id="wifis" size="4" onchange="document.getElementById('ssid').value=this.value;">
+    </select><br>
+    <label for="password">Password:</label><br>
     <input type="text" name="password" id="password" value="">
   </fieldset>
-  <fieldset>
+  <fieldset style="height:180px;">
   <legend>MQTT</legend>
-    <label for="mqtt_server">MQTT сървър:</label><br>
+    <label for="mqtt_server">MQTT server:</label><br>
     <input type="text" name="mqtt_server" id="mqtt_server" value=""><br>
-    <label for="mqtt_serverport">MQTT порт [без SSL]:</label><br>
+    <label for="mqtt_serverport">MQTT port [no SSL]:</label><br>
     <input type="text" name="mqtt_serverport" id="mqtt_serverport" value=""><br>
-    <label for="mqtt_username">MQTT потребител:</label><br>
+    <label for="mqtt_username">MQTT username:</label><br>
     <input type="text" name="mqtt_username" id="mqtt_username" value=""><br>
-    <label for="mqtt_key">MQTT парола:</label><br>
+    <label for="mqtt_key">MQTT password:</label><br>
     <input type="text" name="mqtt_key" id="mqtt_key" value=""></td></tr>
+  </fieldset>
+  <fieldset style="border: solid 1px #11ff00; height:180px;">
+    <legend>Статус</legend>
+    Version: <span class="data" id="version"></span><br>
+    MAC: <span class="data" id="mac"></span><br>
+    RSSI: <span class="data" id="rssi"></span><span class="data">dBi</span><br>
+    Vcc: <span class="data" id="vcc"></span><span class="data">V</span><br>
+    Time and date: <span class="data" id="time"></span><br>
   </fieldset>
   </div>
   <div style="text-align:center;padding:15px;">
-  <input type="submit" value=" ЗАПИС ">
+  <input type="submit" value=" SAVE ">
   </div>
   </form>
   <div style="padding:2px;">
   <fieldset style="border: solid 1px #ff0000;">
-  <legend>Важно</legend>
-  Моля, имайте предвид, че проверки за грешки на въведените данни не се правят! Ако въведете грешни данни може да се наложи да рестартирате устройството към заводски настройки чрез задържане на GPIO0 към маса за 10 секунди.
+  <legend>Important</legend>
+  Please verify all the data before you click SAVE as there is no error correction. If you enter wrong data and the device disappears from your sight - hold GPIO0 to ground for 10 seconds (this will do factory reset).
   </fieldset>
   <fieldset style="border: solid 1px #11ff00;">
-  <legend>Статус</legend>
-  Версия: <span class="data" id="version"></span><br>
-  Ниво на wifi сигнал: <span class="data" id="rssi"></span><span class="data">dBi</span><br>
-  Захранващо напрежение: <span class="data" id="vcc"></span><span class="data">V</span><br>
-  Час и дата: <span class="data" id="time"></span><br>
-  </fieldset>
-  <fieldset style="border: solid 1px #11ff00;">
-  <legend>MQTT информация</legend>
-  MQTT данните са достъпни в тема <span id="h1"></span>/#<br>
-  За управление на изходите ползвайте публикации във формат: <span id="h2"></span>/set/pin1=1 за включване, и съответно 0 за изключване. Веднага след манипулация устройството ще върне статус на съответния изход във формат <span id="h3"></span>/status/pin1=1, ако е включен, или 0, ако е изключен.<br>
+  <legend>MQTT details</legend>
+  MQTT data is accessible at topic <span style="font-weight:bold;" id="h1"></span><b>/#</b><br>
+  For managing output, ports publish like this: <span style="font-weight:bold;" id="h2"></span><b>/set/pin1=1</b> for switch ON, and 0 for switch OFF. Immediate status update will be published at topic  <span style="font-weight:bold;" id="h3"></span><b>/status/pin1=1</b>, if it's ON, or 0, if it's OFF.<br>
   </fieldset>
 </div>
   <script type="text/javascript">
@@ -225,6 +235,7 @@ fieldset legend {
         if (data.mqtt_username!="") document.getElementById("mqtt_username").value = data.mqtt_username;
         if (data.mqtt_key!="") document.getElementById("mqtt_key").value = data.mqtt_key;
         if (data.version!="") document.getElementById("version").textContent = data.version;
+        if (data.mac!="") document.getElementById("mac").textContent = data.mac;
         if (data.rssi!="") document.getElementById("rssi").textContent = data.rssi;
         if (data.vc!="") document.getElementById("vcc").textContent = data.vcc;
         if (data.time!="") document.getElementById("time").textContent = data.time;
@@ -233,8 +244,23 @@ fieldset legend {
         if (data.hostname!="") document.getElementById("h3").textContent = data.hostname;
         if (data.hostname!="") document.title = data.hostname;
         var opts='';
-        for(var w in data.wifis)
-          opts+='<option value="' + w + '">' + w + ' [' + data.wifis[w] + '] </option>';
+        var array=[];
+        for(var w in data.wifis){
+          array.push({ssid:w,rssi:data.wifis[w]})
+        }
+        array.sort(function(a,b){return a.rssi - b.rssi});
+        array.reverse();
+        for(var i in array) {
+          var col='#ff0000';
+          if (array[i].rssi>-90) col='#ffaa00';
+          if (array[i].rssi>-80) col='#ffff00';
+          if (array[i].rssi>-65) col='#00ff00';
+          opts+='<option value="' + array[i].ssid + '" style="color: ' + col + ';" ';
+          if (array[i].ssid==data.ssid) opts+=' selected';
+          opts+='>' + array[i].ssid + ' [' + array[i].rssi + '] ';
+          if (array[i].ssid==data.ssid) opts+='<-';
+          opts+='</option>';
+        }
         document.getElementById("wifis").innerHTML=opts;
       }
     };
@@ -249,6 +275,24 @@ fieldset legend {
         if (data.rssi!="") document.getElementById("rssi").textContent = data.rssi;
         if (data.vc!="") document.getElementById("vcc").textContent = data.vcc;
         if (data.time!="") document.getElementById("time").textContent = data.time;
+        var opts='';
+        var array=[];
+        for(var w in data.wifis){
+          array.push({ssid:w,rssi:data.wifis[w]})
+        }
+        array.sort(function(a,b){return a.rssi - b.rssi});
+        array.reverse();
+        for(var i in array) {
+          var col='#ff0000';
+          if (array[i].rssi>-90) col='#ffaa00';
+          if (array[i].rssi>-85) col='#ffff00';
+          if (array[i].rssi>-65) col='#00ff00';
+          opts+='<option value="' + array[i].ssid + '" style="color: ' + col + ';" ';
+          opts+='>' + array[i].ssid + ' [' + array[i].rssi + '] ';
+          if (array[i].ssid==data.ssid) opts+='<-';
+          opts+='</option>';
+        }
+        document.getElementById("wifis").innerHTML=opts;
       }
     };
     xhttp.open("GET", "/data", true);
@@ -284,7 +328,7 @@ String getMacAddress() {
 bool openFS() {
   if (!SPIFFS.begin()) {
     Serial.println(F("[ERR] Не може да бъде монтирана файловат система. Ще бъде направен опит за форматиране."));
-    if (!SPIFFS.format()) 
+    if (!SPIFFS.format())
       Serial.println(F("[ERR] Файловата система не може да бъде форматирана."));
     else
       Serial.println(F("[OK] Файловата система е форматирана успешно."));
@@ -312,7 +356,7 @@ bool loadConfig() {
     Serial.println(F("[ERR] Конфигурационния файл е твърде голям."));
     return false;
   }
-  
+
   std::unique_ptr<char[]> buf(new char[size]);
   configFile.readBytes(buf.get(), size);
   StaticJsonBuffer<500> jsonBuffer;
@@ -352,8 +396,8 @@ bool loadConfig() {
   if (_ADMIN_PASS.length() == 0) _ADMIN_PASS = "";
   if (_SSID.length() == 0) _SSID = "";
   if (_PASS.length() == 0) _PASS = "";
-  if (_NTP_SERVER.length() == 0) _NTP_SERVER="time.nist.gov";
-  if (_TIMEZONE.length() == 0) _TIMEZONE="+3";
+  if (_NTP_SERVER.length() == 0) _NTP_SERVER = "time.nist.gov";
+  if (_TIMEZONE.length() == 0) _TIMEZONE = "+3";
 
   Serial.print(F("SSID: "));
   Serial.println(_SSID);
@@ -362,18 +406,18 @@ bool loadConfig() {
 }
 
 void get_data() {
-  if ((!server.authenticate("admin", _ADMIN_PASS.c_str())) && (_CLIENT))
-    server.requestAuthentication();
-    int w = WiFi.scanNetworks();
-    String wifis="{";
-    byte i;
-    for (i=0;i<w;i++) {
-      wifis+="\"" + WiFi.SSID(i) + "\":\"" + WiFi.RSSI(i) + "\"";
-      if (i<w-1) wifis+=", ";
-    }
-    wifis+="}";
-    server.send ( 200, F("application/json"), \
-      "{\"hostname\":\"" + String(_HOSTNAME) + "\", \
+  //  if ((!server.authenticate("admin", _ADMIN_PASS.c_str())) && (_CLIENT))
+  //    server.requestAuthentication();
+  int w = WiFi.scanNetworks();
+  String wifis = "{";
+  byte i;
+  for (i = 0; i < w; i++) {
+    wifis += "\"" + WiFi.SSID(i) + "\":\"" + WiFi.RSSI(i) + "\"";
+    if (i < w - 1) wifis += ", ";
+  }
+  wifis += "}";
+  server.send ( 200, F("application/json"), \
+                "{\"hostname\":\"" + String(_HOSTNAME) + "\", \
         \"ssid\":\"" + String(_SSID) + "\", \
         \"ntp_server\":\"" + _NTP_SERVER + "\", \
         \"timezone\":\"" + _TIMEZONE + "\", \
@@ -387,15 +431,15 @@ void get_data() {
         \"rssi\":\"" + String(WiFi.RSSI()) + "\", \
         \"time\":\"" + NTP.getTimeDateString() + "\", \
         \"vcc\":\"" + String(float(ESP.getVcc() / 1000.0)) + "\", \
-        \"wifis\":" + wifis + \ 
-        "}" );
+        \"wifis\":" + wifis + \
+                "}" );
 }
 
-void html_root(){
+void html_root() {
   server.send(200, F("text/html"), PAGE_root);
 }
 
-void html_favicon(){
+void html_favicon() {
   server.send(200, F("image/svg+xml"), PAGE_favicon);
 }
 
@@ -460,7 +504,7 @@ void handle_showconfig() {
 void handle_deleteconfig() {
   if (!server.authenticate("admin", _ADMIN_PASS.c_str()))
     server.requestAuthentication();
-  if (!SPIFFS.format()) 
+  if (!SPIFFS.format())
     Serial.println(F("[ERR] Файловата система не може да бъде форматирана."));
   else
     Serial.println(F("[OK] Файловата система е форматирана успешно."));
@@ -473,7 +517,6 @@ void checkforupdate() {
   Serial.print(F("Проверка за актуализация... "));
   auto ret = ESPhttpUpdate.update(_UPDATE_SERVER, _UPDATE_PORT, _UPDATE_URL, _VERSION);
   Serial.println(String(ret));
-  Serial.println(NTP.getTimeDateString());
   mqttClient.publish(String(_HOSTNAME + "/status/online").c_str(), 1, true, "1");
   mqttClient.publish(String(_HOSTNAME + "/status/rssi").c_str(), 1, true, String(WiFi.RSSI()).c_str());
   mqttClient.publish(String(_HOSTNAME + "/status/vcc").c_str(), 1, true, String(vcc).c_str());
@@ -503,7 +546,7 @@ void onMqttDisconnect(AsyncMqttClientDisconnectReason reason) {
   if ((currentMillis - mqtt_lastReconnectAttempt) / 1000 >= 30) {
     IPAddress mqttIP;
     WiFi.hostByName(_MQTT_SERVER.c_str(), mqttIP);
-    Serial.println(String("Опит за връзка с MQTT брокер "+_MQTT_SERVER+", ИП адрес: "+mqttIP.toString()));
+    Serial.println(String("Опит за връзка с MQTT брокер " + _MQTT_SERVER + ", ИП адрес: " + mqttIP.toString()));
     mqttClient.setServer(mqttIP, _MQTT_SERVERPORT.toInt());
     mqtt_lastReconnectAttempt = currentMillis;
     mqttClient.connect();
@@ -544,7 +587,7 @@ void wifi_connect() {
   if (!_CLIENT) {
     led_delay = 500;  //if in mode AP blink twice in a second
     Serial.printf("SSID: %s\r\n", _SSID.c_str());
-    if (_PASS!="") Serial.printf("Парола: %s\r\n", _PASS.c_str());
+    if (_PASS != "") Serial.printf("Парола: %s\r\n", _PASS.c_str());
     WiFi.mode(WIFI_AP);
     WiFi.softAP(_SSID.c_str(), _PASS.c_str(), _CHANNEL);
     WiFi.softAPConfig(_IP, _GATE, _MASK);
@@ -569,6 +612,10 @@ void wifi_connect() {
         Serial.println(F("[ERR] Май няма смисъл. Рестарт!"));
         ESP.restart();
       }
+      if (digitalRead(_PIN_RESET)==0){
+        Serial.println(F("Reset pressed!"));
+        return;
+      }
     }
     Serial.println("OK");
   }
@@ -586,7 +633,7 @@ void setup()
   pinMode(_PIN_LED, OUTPUT); digitalWrite(_PIN_LED, LOW);
   pinMode(_PIN_RESET, INPUT_PULLUP);  //factory reset
 
-  Serial.begin(115200);Serial.println();
+  Serial.begin(115200); Serial.println();
   Serial.print(_PRODUCT);
   Serial.print(F(", "));
   Serial.println(_VERSION);
@@ -655,14 +702,14 @@ void loop() {
     if (switch_press == 0)
       switch_press = millis();
     Serial.println(F("!"));
-    if ((millis() - switch_press >= 100)and (!switch_press_done)) {
-      (digitalRead(_PIN1)==0)?(switchpin(_PIN1,1)):(switchpin(_PIN1,0));
+    if ((millis() - switch_press >= 100) and (!switch_press_done)) {
+      (digitalRead(_PIN1) == 0) ? (switchpin(_PIN1, 1)) : (switchpin(_PIN1, 0));
       mqttClient.publish(String(_HOSTNAME + "/status/pin1").c_str(), 1, true, String(digitalRead(_PIN1)).c_str());
-      switch_press_done=true;
+      switch_press_done = true;
     }
   } else {
     reset_hold = 0;
-    switch_press_done=false;
+    switch_press_done = false;
   }
 
   //handle blinking frequency
@@ -670,10 +717,10 @@ void loop() {
     digitalWrite(_PIN_LED, LOW);
     blink_millis = currentMillis;
   }
-  if (currentMillis-blink_millis>1) {
+  if (currentMillis - blink_millis > 1) {
     digitalWrite(_PIN_LED, HIGH);
     blink_millis = currentMillis;
-  }    
+  }
 
   if (_CLIENT) {
     //handle disconnect event
@@ -694,28 +741,28 @@ void loop() {
 
   if (Serial.available()) {
     char c = Serial.read();
-    if (c=='1') {
-      (digitalRead(_PIN1)==0)?(switchpin(_PIN1,1)):(switchpin(_PIN1,0));
+    if (c == '1') {
+      (digitalRead(_PIN1) == 0) ? (switchpin(_PIN1, 1)) : (switchpin(_PIN1, 0));
       mqttClient.publish(String(_HOSTNAME + "/status/pin1").c_str(), 1, true, String(digitalRead(_PIN1)).c_str());
     }
-    if (c=='2') {
-      (digitalRead(_PIN2)==0)?(switchpin(_PIN2,1)):(switchpin(_PIN2,0));
+    if (c == '2') {
+      (digitalRead(_PIN2) == 0) ? (switchpin(_PIN2, 1)) : (switchpin(_PIN2, 0));
       mqttClient.publish(String(_HOSTNAME + "/status/pin2").c_str(), 1, true, String(digitalRead(_PIN2)).c_str());
     }
-    if (c=='3') {
-      (digitalRead(_PIN3)==0)?(switchpin(_PIN3,1)):(switchpin(_PIN3,0));
+    if (c == '3') {
+      (digitalRead(_PIN3) == 0) ? (switchpin(_PIN3, 1)) : (switchpin(_PIN3, 0));
       mqttClient.publish(String(_HOSTNAME + "/status/pin3").c_str(), 1, true, String(digitalRead(_PIN3)).c_str());
     }
-    if (c=='4') {
-      (digitalRead(_PIN4)==0)?(switchpin(_PIN4,1)):(switchpin(_PIN4,0));
+    if (c == '4') {
+      (digitalRead(_PIN4) == 0) ? (switchpin(_PIN4, 1)) : (switchpin(_PIN4, 0));
       mqttClient.publish(String(_HOSTNAME + "/status/pin4").c_str(), 1, true, String(digitalRead(_PIN4)).c_str());
     }
-    if (c=='w') {
+    if (c == 'w') {
       int w = WiFi.scanNetworks();
       if (w == 0)
         Serial.println("no wifi networks found");
       byte i;
-      for (i=0;i<w;i++) {
+      for (i = 0; i < w; i++) {
         Serial.print(WiFi.SSID(i));
         Serial.print(F(" ["));
         Serial.print(WiFi.RSSI(i));
