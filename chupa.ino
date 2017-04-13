@@ -40,7 +40,7 @@ const byte _PIN4 = 13;
 String _SSID;
 String _PASS;
 String _ADMIN_PASS = "";
-bool _CLIENT = false; // dali e wifi client ili ap
+bool _CLIENT = false; // are we client or AP?
 const byte _CHANNEL = random(1, 13);
 const char* _CONFIG = "/config.json";
 const char* update_path = "/update";
@@ -347,13 +347,13 @@ bool loadConfig() {
   openFS();
   File configFile = SPIFFS.open(_CONFIG, "r");
   if (!configFile) {
-    Serial.println(F("[ERR] Няма намерена конфигурация."));
+    Serial.println(F("[ERR] No configuration found."));
     return false;
   }
 
   size_t size = configFile.size();
   if (size > 1024) {
-    Serial.println(F("[ERR] Конфигурационния файл е твърде голям."));
+    Serial.println(F("[ERR] configuration file is too large."));
     return false;
   }
 
@@ -363,7 +363,7 @@ bool loadConfig() {
   JsonObject& json = jsonBuffer.parseObject(buf.get());
 
   if (!json.success()) {
-    Serial.println(F("[ERR] Не може да бъде разпознат конфигурационния файл."));
+    Serial.println(F("[ERR] Can't parse configuration file."));
     return false;
   }
   const char* ssid = json["ssid"];
@@ -396,7 +396,7 @@ bool loadConfig() {
   if (_ADMIN_PASS.length() == 0) _ADMIN_PASS = "";
   if (_SSID.length() == 0) _SSID = "";
   if (_PASS.length() == 0) _PASS = "";
-  if (_NTP_SERVER.length() == 0) _NTP_SERVER = "time.nist.gov";
+  if (_NTP_SERVER.length() == 0) _NTP_SERVER = "bg.pool.ntp.org";
   if (_TIMEZONE.length() == 0) _TIMEZONE = "+3";
 
   Serial.print(F("SSID: "));
@@ -406,8 +406,8 @@ bool loadConfig() {
 }
 
 void get_data() {
-  //  if ((!server.authenticate("admin", _ADMIN_PASS.c_str())) && (_CLIENT))
-  //    server.requestAuthentication();
+  if ((!server.authenticate("admin", _ADMIN_PASS.c_str())) && (_CLIENT))
+    server.requestAuthentication();
   int w = WiFi.scanNetworks();
   String wifis = "{";
   byte i;
@@ -474,7 +474,7 @@ void handle_configure() {
   File configFile = SPIFFS.open(_CONFIG, "w");
   int error = 0;
   if (!configFile) {
-    Serial.println(F("[ERR] Конфигурацията не може да бъде съхранена."));
+    Serial.println(F("[ERR] Configuration can't be saved for some reason."));
     error = 1;
   }
   json.printTo(configFile);
@@ -505,18 +505,17 @@ void handle_deleteconfig() {
   if (!server.authenticate("admin", _ADMIN_PASS.c_str()))
     server.requestAuthentication();
   if (!SPIFFS.format())
-    Serial.println(F("[ERR] Файловата система не може да бъде форматирана."));
+    Serial.println(F("[ERR] Unable to format flash."));
   else
-    Serial.println(F("[OK] Файловата система е форматирана успешно."));
-  Serial.println(F("Рестарт..."));
+    Serial.println(F("[OK] Flash formatted."));
+  Serial.println(F("Restarting..."));
   ESP.restart();
 }
 
 void checkforupdate() {
   float vcc = ESP.getVcc() / 1000.0; // supply voltage
-  Serial.print(F("Проверка за актуализация... "));
+  Serial.println(F("Checking for update..."));
   auto ret = ESPhttpUpdate.update(_UPDATE_SERVER, _UPDATE_PORT, _UPDATE_URL, _VERSION);
-  Serial.println(String(ret));
   mqttClient.publish(String(_HOSTNAME + "/status/online").c_str(), 1, true, "1");
   mqttClient.publish(String(_HOSTNAME + "/status/rssi").c_str(), 1, true, String(WiFi.RSSI()).c_str());
   mqttClient.publish(String(_HOSTNAME + "/status/vcc").c_str(), 1, true, String(vcc).c_str());
@@ -529,7 +528,7 @@ void checkforupdate() {
   mqttClient.publish(String(_HOSTNAME + "/status/pin2").c_str(), 1, true, String(digitalRead(_PIN2)).c_str());
   mqttClient.publish(String(_HOSTNAME + "/status/pin3").c_str(), 1, true, String(digitalRead(_PIN3)).c_str());
   mqttClient.publish(String(_HOSTNAME + "/status/pin4").c_str(), 1, true, String(digitalRead(_PIN4)).c_str());
-  server.send(200, F("text/plain"), F("Проверка за актуализация..."));
+  server.send(200, F("text/plain"), F("Checking for update..."));
 }
 
 void switchpin(int pin, int state) {
@@ -546,14 +545,14 @@ void onMqttDisconnect(AsyncMqttClientDisconnectReason reason) {
   if ((currentMillis - mqtt_lastReconnectAttempt) / 1000 >= 30) {
     IPAddress mqttIP;
     WiFi.hostByName(_MQTT_SERVER.c_str(), mqttIP);
-    Serial.println(String("Опит за връзка с MQTT брокер " + _MQTT_SERVER + ", ИП адрес: " + mqttIP.toString()));
+    Serial.println(String("Connecting to MQTT broker " + _MQTT_SERVER + ", resolved to " + mqttIP.toString()));
     mqttClient.setServer(mqttIP, _MQTT_SERVERPORT.toInt());
     mqtt_lastReconnectAttempt = currentMillis;
     mqttClient.connect();
   }
 }
 void onMqttSubscribe(uint16_t packetId, uint8_t qos) {
-  Serial.println(F("готово!"));
+  Serial.println(F("[OK] MQTT subscription done!"));
 }
 void onMqttMessage(char* topic, char* payload, AsyncMqttClientMessageProperties properties, size_t len, size_t index, size_t total) {
   String msg = String(topic);
@@ -587,16 +586,16 @@ void wifi_connect() {
   if (!_CLIENT) {
     led_delay = 500;  //if in mode AP blink twice in a second
     Serial.printf("SSID: %s\r\n", _SSID.c_str());
-    if (_PASS != "") Serial.printf("Парола: %s\r\n", _PASS.c_str());
+    if (_PASS != "") Serial.printf("Password: %s\r\n", _PASS.c_str());
     WiFi.mode(WIFI_AP);
     WiFi.softAP(_SSID.c_str(), _PASS.c_str(), _CHANNEL);
     WiFi.softAPConfig(_IP, _GATE, _MASK);
     IPAddress myIP = WiFi.softAPIP();
-    Serial.print(F("За да конфигурирате, моля закачете се за безжичната мрежа и отворете http://"));
+    Serial.print(F("To configure the device, please connect to the wifi network and open http://"));
     Serial.println(myIP.toString().c_str());
   } else {
-    led_delay = 10000;  //if client - blink once every 10 seconds
-    Serial.print(F("Опит за връзка с "));
+    led_delay = 5000;  //if client - blink once every 5 seconds
+    Serial.print(F("Connecting to "));
     Serial.println(_SSID.c_str());
     WiFi.mode(WIFI_STA);
     WiFi.begin(_SSID.c_str(), _PASS.c_str());
@@ -609,13 +608,10 @@ void wifi_connect() {
       digitalWrite(_PIN_LED, HIGH);
       yield();
       if ((millis() - start) / 1000 >= _WIFI_TIMEOUT) {
-        Serial.println(F("[ERR] Май няма смисъл. Рестарт!"));
+        Serial.println(F("[ERR] Too much... Restart!"));
         ESP.restart();
       }
-      if (digitalRead(_PIN_RESET)==0){
-        Serial.println(F("Reset pressed!"));
-        return;
-      }
+      if (digitalRead(_PIN_RESET)==0) return;
     }
     Serial.println("OK");
   }
@@ -680,7 +676,7 @@ void setup()
 
 
 void loop() {
-  unsigned long currentMillis = millis();
+//  unsigned long currentMillis = millis();
   server.handleClient();
 
   // FACTORY RESET
@@ -701,25 +697,22 @@ void loop() {
   if (digitalRead(_PIN_RESET) == 0) {
     if (switch_press == 0)
       switch_press = millis();
-    Serial.println(F("!"));
-    if ((millis() - switch_press >= 100) and (!switch_press_done)) {
+    if ((millis() - switch_press >= 200) and (!switch_press_done)) {
       (digitalRead(_PIN1) == 0) ? (switchpin(_PIN1, 1)) : (switchpin(_PIN1, 0));
       mqttClient.publish(String(_HOSTNAME + "/status/pin1").c_str(), 1, true, String(digitalRead(_PIN1)).c_str());
       switch_press_done = true;
     }
   } else {
-    reset_hold = 0;
+    switch_press = millis()+1000;
     switch_press_done = false;
   }
 
   //handle blinking frequency
-  if ((currentMillis - blink_millis) >= led_delay) {
+  if (millis() - blink_millis >= led_delay) {
     digitalWrite(_PIN_LED, LOW);
-    blink_millis = currentMillis;
-  }
-  if (currentMillis - blink_millis > 1) {
+    delay(1);
     digitalWrite(_PIN_LED, HIGH);
-    blink_millis = currentMillis;
+    blink_millis = millis();
   }
 
   if (_CLIENT) {
@@ -731,8 +724,8 @@ void loop() {
     }
 
     //update check
-    if ((currentMillis - last_update_check) / 1000 >= _UPDATE_CHECK_INTERVAL) {
-      last_update_check = currentMillis;
+    if ((millis() - last_update_check) / 1000 >= _UPDATE_CHECK_INTERVAL) {
+      last_update_check = millis();
       checkforupdate();
     }
   } else {
@@ -758,9 +751,10 @@ void loop() {
       mqttClient.publish(String(_HOSTNAME + "/status/pin4").c_str(), 1, true, String(digitalRead(_PIN4)).c_str());
     }
     if (c == 'w') {
+      Serial.println(F("Scanning for wifi networks..."));
       int w = WiFi.scanNetworks();
       if (w == 0)
-        Serial.println("no wifi networks found");
+        Serial.println(F("no wifi networks found"));
       byte i;
       for (i = 0; i < w; i++) {
         Serial.print(WiFi.SSID(i));
@@ -768,6 +762,7 @@ void loop() {
         Serial.print(WiFi.RSSI(i));
         Serial.println("dBi]");
       }
+      Serial.println();
     }
   }
   watchdog_counter = 0;
