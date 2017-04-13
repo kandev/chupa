@@ -1,5 +1,5 @@
+Universal remote switch based on ESP8266.
+General configuration is done via web interface. Diagnostics and GPIO control is done via MQTT.
 
-Универсално управление и автоматична актуализация на контролер базиран на ESP8266.
-Основни параметри се задават през уеб интерфейс. Диагностични данни и управление на вход/изходите се прави през MQTT.
-
-Кода не е особено чист, понеже постоянно се работи по него.
+Source code is still dirty, because of the intensive updates.
+More information will be published later.
