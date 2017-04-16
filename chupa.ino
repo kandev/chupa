@@ -12,7 +12,7 @@
 ADC_MODE(ADC_VCC);  //read supply voltage by ESP.getVcc()
 
 //Main configuration
-const char* _VERSION = "0.13";
+const char* _VERSION = "0.14";
 const char* _PRODUCT = "Chupa";
 String _HOSTNAME = "";
 const char* _UPDATE_SERVER = "chupa.kandev.com";
@@ -22,13 +22,16 @@ const unsigned int _UPDATE_CHECK_INTERVAL = 300; // in seconds
 int _DEEPSLEEP_INTERVAL = 900; // in seconds
 const unsigned int _WATCHDOG_TIMEOUT = 600; // in seconds
 String _MQTT_SERVER;
-String _MQTT_SERVERPORT;
+unsigned int _MQTT_SERVERPORT;
 String _MQTT_USERNAME;
 String _MQTT_KEY;
 String _NTP_SERVER;
 const unsigned int _WIFI_TIMEOUT = 300;
 const unsigned int _MQTT_TIMEOUT = 600;
 String _TIMEZONE;
+String _SCHED1_TIME;
+unsigned int _SCHED1_DURATION;
+byte _SCHED1_PIN;
 
 const byte _PIN_RESET = 0;
 const byte _PIN_LED = 2;
@@ -129,8 +132,8 @@ input[type=submit] {
   border: 1px solid #000;
   border-radius: 4px;
   padding: 5px;
-  padding-left: 20px;
-  padding-right: 20px;
+  padding-left: 30px;
+  padding-right: 30px;
   font-weight: bold;
 }
 label {
@@ -157,6 +160,34 @@ fieldset legend {
 .data {
   color: #ffd500;
   font-weight: bold;
+}
+.gpio_off {
+  color: #aaa;
+  background-color: #000;
+  border: 1px solid #aaa;
+  border-radius: 4px;
+  padding: 4px;
+  padding-left: 20px;
+  padding-right: 20px;
+  font-weight: bold;
+  margin: 5px;
+}
+.gpio_on {
+  color: #000;
+  background-color: #aaa;
+  border: 1px solid #000;
+  border-radius: 4px;
+  padding: 4px;
+  padding-left: 20px;
+  padding-right: 20px;
+  font-weight: bold;
+  margin: 5px;
+}
+.gpio_on:hover {
+  border: 1px solid #fff;
+}
+.gpio_off:hover {
+  border: 1px solid #fff;
 }
 </style>
 
@@ -194,8 +225,30 @@ fieldset legend {
     <label for="mqtt_key">MQTT password:</label><br>
     <input type="text" name="mqtt_key" id="mqtt_key" value=""></td></tr>
   </fieldset>
+  <fieldset style="height:180px;">
+  <legend>Daily schedule</legend>
+    <label for="sched1_time">Time [HH:MM]:</label><br>
+    <input type="text" name="sched1_time" id="sched1_time" value=""><br>
+    <label for="sched1_duration">Duration in minutes:</label><br>
+    <input type="text" name="sched1_duration" id="sched1_duration" value=""><br>
+    <label for="sched1_gpio">Output:</label><br>
+    <select name="sched1_pin" id="sched1_pin">
+  <option value="0">none</option>
+  <option value="1">1</option>
+  <option value="2">2</option>
+  <option value="3">3</option>
+  <option value="4">4</option>
+  </select></td></tr>
+  </fieldset>
+  <fieldset style="height:180px;">
+  <legend>Output Control</legend>
+  <input type="button" class="gpio_off" name="pin1" id="pin1" value="Output 1" onclick="switch_pin(this.id);"><br>
+  <input type="button" class="gpio_off" name="pin2" id="pin2" value="Output 2" onclick="switch_pin(this.id);"><br>
+  <input type="button" class="gpio_off" name="pin3" id="pin3" value="Output 3" onclick="switch_pin(this.id);"><br>
+  <input type="button" class="gpio_off" name="pin4" id="pin4" value="Output 4" onclick="switch_pin(this.id);"><br>
+  </fieldset>
   <fieldset style="border: solid 1px #11ff00; height:180px;">
-    <legend>Статус</legend>
+    <legend>Status</legend>
     Version: <span class="data" id="version"></span><br>
     MAC: <span class="data" id="mac"></span><br>
     RSSI: <span class="data" id="rssi"></span><span class="data">dBi</span><br>
@@ -262,6 +315,25 @@ fieldset legend {
           opts+='</option>';
         }
         document.getElementById("wifis").innerHTML=opts;
+        if (data.pin1=="1") 
+          document.getElementById("pin1").className = "gpio_on";
+        else
+          document.getElementById("pin1").className = "gpio_off";
+        if (data.pin2=="1")
+          document.getElementById("pin2").className = "gpio_on";
+        else
+          document.getElementById("pin2").className = "gpio_off";
+        if (data.pin3=="1")
+          document.getElementById("pin3").className = "gpio_on";
+        else
+          document.getElementById("pin3").className = "gpio_off";
+        if (data.pin4=="1")
+          document.getElementById("pin4").className = "gpio_on";
+        else
+          document.getElementById("pin4").className = "gpio_off";
+        if (data.sched1_time!="") document.getElementById("sched1_time").value = data.sched1_time;
+        if (data.sched1_duration!="") document.getElementById("sched1_duration").value = data.sched1_duration;
+        if (data.sched1_pin!="") document.getElementById("sched1_pin").value = data.sched1_pin;
       }
     };
     xhttp.open("GET", "/data", true);
@@ -293,6 +365,22 @@ fieldset legend {
           opts+='</option>';
         }
         document.getElementById("wifis").innerHTML=opts;
+        if (data.pin1=="1") 
+          document.getElementById("pin1").className = "gpio_on";
+        else
+          document.getElementById("pin1").className = "gpio_off";
+        if (data.pin2=="1")
+          document.getElementById("pin2").className = "gpio_on";
+        else
+          document.getElementById("pin2").className = "gpio_off";
+        if (data.pin3=="1")
+          document.getElementById("pin3").className = "gpio_on";
+        else
+          document.getElementById("pin3").className = "gpio_off";
+        if (data.pin4=="1")
+          document.getElementById("pin4").className = "gpio_on";
+        else
+          document.getElementById("pin4").className = "gpio_off";
       }
     };
     xhttp.open("GET", "/data", true);
@@ -300,6 +388,42 @@ fieldset legend {
   }
   updateData();
   window.setInterval(updateDynamicData,10000);
+  
+  function switch_pin(pin) {
+    document.getElementById(pin).style.backgroundColor="#444";
+    var xhttp = new XMLHttpRequest();
+    if (document.getElementById(pin).className=="gpio_on")
+      state="0";
+    else
+      state="1";
+    var params = pin + '=' + state;
+    xhttp.onreadystatechange = function() {
+      if (this.readyState == 4 && this.status == 200) {
+        var data = JSON.parse(this.responseText);
+        if (data.pin1=="1") 
+          document.getElementById("pin1").className = "gpio_on";
+        else
+          document.getElementById("pin1").className = "gpio_off";
+        if (data.pin2=="1")
+          document.getElementById("pin2").className = "gpio_on";
+        else
+          document.getElementById("pin2").className = "gpio_off";
+        if (data.pin3=="1")
+          document.getElementById("pin3").className = "gpio_on";
+        else
+          document.getElementById("pin3").className = "gpio_off";
+        if (data.pin4=="1")
+          document.getElementById("pin4").className = "gpio_on";
+        else
+          document.getElementById("pin4").className = "gpio_off";
+        if (data.time!="") document.getElementById("time").textContent = data.time;
+      }
+      document.getElementById(pin).style.backgroundColor="";
+    }
+    xhttp.open("POST", "/gpio", true);
+    xhttp.setRequestHeader("Content-type", "application/x-www-form-urlencoded");
+    xhttp.send(params);
+  }
   </script>
 <div style="position: fixed; bottom: 0; width: 100%; text-align: right;">
 &copy; <a class="cc" href="http://kandev.com" title="kandev.com" target="_blank">kandev.com</a>
@@ -359,7 +483,7 @@ bool loadConfig() {
 
   std::unique_ptr<char[]> buf(new char[size]);
   configFile.readBytes(buf.get(), size);
-  StaticJsonBuffer<500> jsonBuffer;
+  StaticJsonBuffer<1000> jsonBuffer;
   JsonObject& json = jsonBuffer.parseObject(buf.get());
 
   if (!json.success()) {
@@ -370,27 +494,29 @@ bool loadConfig() {
   const char* pass = json["pass"];
   const char* hostname = json["hostname"];
   const char* mqtt_server = json["mqtt_server"];
-  const char* mqtt_serverport = json["mqtt_serverport"];
+  _MQTT_SERVERPORT = json["mqtt_serverport"];
   const char* mqtt_user = json["mqtt_username"];
   const char* mqtt_key = json["mqtt_key"];
   const char* admin_pass = json["admin_password"];
   const char* ntp_server = json["ntp_server"];
   const char* timezone = json["timezone"];
+  const char* sched1_time = json["sched1_time"];
+  _SCHED1_DURATION = json["sched1_duration"];
+  _SCHED1_PIN = json["sched1_pin"];
 
   if (String(hostname) != "")
     _HOSTNAME = hostname;
   _SSID = ssid;
   _PASS = pass;
   _MQTT_SERVER = mqtt_server;
-  _MQTT_SERVERPORT = mqtt_serverport;
   _MQTT_USERNAME = mqtt_user;
   _MQTT_KEY = mqtt_key;
   _ADMIN_PASS = admin_pass;
   _NTP_SERVER = ntp_server;
   _TIMEZONE = timezone;
+  _SCHED1_TIME = sched1_time;
 
   if (_MQTT_SERVER.length() == 0) _MQTT_SERVER = "";
-  if (_MQTT_SERVERPORT.length() == 0) _MQTT_SERVERPORT = "";
   if (_MQTT_USERNAME.length() == 0) _MQTT_USERNAME = "";
   if (_MQTT_KEY.length() == 0) _MQTT_KEY = "";
   if (_ADMIN_PASS.length() == 0) _ADMIN_PASS = "";
@@ -398,11 +524,17 @@ bool loadConfig() {
   if (_PASS.length() == 0) _PASS = "";
   if (_NTP_SERVER.length() == 0) _NTP_SERVER = "bg.pool.ntp.org";
   if (_TIMEZONE.length() == 0) _TIMEZONE = "+3";
+  if (_SCHED1_DURATION >= 1440) _SCHED1_DURATION=1439;
+  if (_SCHED1_TIME.length() == 0) _SCHED1_TIME = "10:00";
 
   Serial.print(F("SSID: "));
   Serial.println(_SSID);
   closeFS();
   return true;
+}
+
+void switchpin(int pin, int state) {
+  digitalWrite(pin, state);
 }
 
 void get_data() {
@@ -416,8 +548,8 @@ void get_data() {
     if (i < w - 1) wifis += ", ";
   }
   wifis += "}";
-  server.send ( 200, F("application/json"), \
-                "{\"hostname\":\"" + String(_HOSTNAME) + "\", \
+  server.send ( 200, F("application/json"), "{ \
+        \"hostname\":\"" + String(_HOSTNAME) + "\", \
         \"ssid\":\"" + String(_SSID) + "\", \
         \"ntp_server\":\"" + _NTP_SERVER + "\", \
         \"timezone\":\"" + _TIMEZONE + "\", \
@@ -430,7 +562,15 @@ void get_data() {
         \"version\":\"" + String(_VERSION) + "\", \
         \"rssi\":\"" + String(WiFi.RSSI()) + "\", \
         \"time\":\"" + NTP.getTimeDateString() + "\", \
+        \"mac\":\"" + getMacAddress() + "\", \
         \"vcc\":\"" + String(float(ESP.getVcc() / 1000.0)) + "\", \
+        \"pin1\":\"" + digitalRead(_PIN1) + "\", \
+        \"pin2\":\"" + digitalRead(_PIN2) + "\", \
+        \"pin3\":\"" + digitalRead(_PIN3) + "\", \
+        \"pin4\":\"" + digitalRead(_PIN4) + "\", \
+        \"sched1_time\":\"" + _SCHED1_TIME + "\", \
+        \"sched1_duration\":\"" + _SCHED1_DURATION + "\", \
+        \"sched1_pin\":\"" + _SCHED1_PIN + "\", \
         \"wifis\":" + wifis + \
                 "}" );
 }
@@ -443,6 +583,60 @@ void html_favicon() {
   server.send(200, F("image/svg+xml"), PAGE_favicon);
 }
 
+void html_gpio() {
+  if ((!server.authenticate("admin", _ADMIN_PASS.c_str())) && (_CLIENT))
+    server.requestAuthentication();
+  for (int i = 0; i < server.args(); i++) {
+    if (server.argName(i) == "pin1")
+      if (server.arg(i) == "1") {
+        switchpin(_PIN1, 1);
+        mqttClient.publish(String(_HOSTNAME + "/set/pin1").c_str(), 1, true, String(digitalRead(_PIN1)).c_str());
+        mqttClient.publish(String(_HOSTNAME + "/status/pin1").c_str(), 1, true, String(digitalRead(_PIN1)).c_str());
+      } else {
+        switchpin(_PIN1, 0);
+        mqttClient.publish(String(_HOSTNAME + "/set/pin1").c_str(), 1, true, String(digitalRead(_PIN1)).c_str());
+        mqttClient.publish(String(_HOSTNAME + "/status/pin1").c_str(), 1, true, String(digitalRead(_PIN1)).c_str());
+      }
+    if (server.argName(i) == "pin2")
+      if (server.arg(i) == "1") {
+        switchpin(_PIN2, 1);
+        mqttClient.publish(String(_HOSTNAME + "/set/pin2").c_str(), 1, true, String(digitalRead(_PIN2)).c_str());
+        mqttClient.publish(String(_HOSTNAME + "/status/pin2").c_str(), 1, true, String(digitalRead(_PIN2)).c_str());
+      } else {
+        switchpin(_PIN2, 0);
+        mqttClient.publish(String(_HOSTNAME + "/set/pin2").c_str(), 1, true, String(digitalRead(_PIN2)).c_str());
+        mqttClient.publish(String(_HOSTNAME + "/status/pin2").c_str(), 1, true, String(digitalRead(_PIN2)).c_str());
+      }
+    if (server.argName(i) == "pin3")
+      if (server.arg(i) == "1") {
+        switchpin(_PIN3, 1);
+        mqttClient.publish(String(_HOSTNAME + "/set/pin3").c_str(), 1, true, String(digitalRead(_PIN3)).c_str());
+        mqttClient.publish(String(_HOSTNAME + "/status/pin3").c_str(), 1, true, String(digitalRead(_PIN3)).c_str());
+      } else {
+        switchpin(_PIN3, 0);
+        mqttClient.publish(String(_HOSTNAME + "/set/pin3").c_str(), 1, true, String(digitalRead(_PIN3)).c_str());
+        mqttClient.publish(String(_HOSTNAME + "/status/pin3").c_str(), 1, true, String(digitalRead(_PIN3)).c_str());
+      }
+    if (server.argName(i) == "pin4")
+      if (server.arg(i) == "1") {
+        switchpin(_PIN4, 1);
+        mqttClient.publish(String(_HOSTNAME + "/set/pin4").c_str(), 1, true, String(digitalRead(_PIN4)).c_str());
+        mqttClient.publish(String(_HOSTNAME + "/status/pin4").c_str(), 1, true, String(digitalRead(_PIN4)).c_str());
+      } else {
+        switchpin(_PIN4, 0);
+        mqttClient.publish(String(_HOSTNAME + "/set/pin4").c_str(), 1, true, String(digitalRead(_PIN4)).c_str());
+        mqttClient.publish(String(_HOSTNAME + "/status/pin4").c_str(), 1, true, String(digitalRead(_PIN4)).c_str());
+      }
+  }
+  server.send ( 200, F("application/json"), "{ \
+        \"time\":\"" + NTP.getTimeDateString() + "\", \
+        \"pin1\":\"" + digitalRead(_PIN1) + "\", \
+        \"pin2\":\"" + digitalRead(_PIN2) + "\", \
+        \"pin3\":\"" + digitalRead(_PIN3) + "\", \
+        \"pin4\":\"" + digitalRead(_PIN4) + "\" \
+                }" );
+}
+
 void handle_configure() {
   if ((!server.authenticate("admin", _ADMIN_PASS.c_str())) && (_CLIENT))
     server.requestAuthentication();
@@ -451,14 +645,17 @@ void handle_configure() {
     if (server.argName(i) == "password") _PASS = server.arg(i);
     if (server.argName(i) == "hostname") _HOSTNAME = server.arg(i);
     if (server.argName(i) == "mqtt_server") _MQTT_SERVER = server.arg(i);
-    if (server.argName(i) == "mqtt_serverport") _MQTT_SERVERPORT = server.arg(i);
+    if (server.argName(i) == "mqtt_serverport") _MQTT_SERVERPORT = server.arg(i).toInt();
     if (server.argName(i) == "mqtt_username") _MQTT_USERNAME = server.arg(i);
     if (server.argName(i) == "mqtt_key") _MQTT_KEY = server.arg(i);
     if (server.argName(i) == "admin_password") _ADMIN_PASS = server.arg(i);
     if (server.argName(i) == "timezone") _TIMEZONE = server.arg(i).toInt();
     if (server.argName(i) == "ntp_server") _NTP_SERVER = server.arg(i);
+    if (server.argName(i) == "sched1_time") _SCHED1_TIME = server.arg(i);
+    if (server.argName(i) == "sched1_duration") _SCHED1_DURATION = server.arg(i).toInt();
+    if (server.argName(i) == "sched1_pin") _SCHED1_PIN = server.arg(i).toInt();
   }
-  StaticJsonBuffer<500> jsonBuffer;
+  StaticJsonBuffer<1000> jsonBuffer;
   JsonObject& json = jsonBuffer.createObject();
   json["ssid"] = _SSID;
   json["pass"] = _PASS;
@@ -470,6 +667,9 @@ void handle_configure() {
   json["admin_password"] = _ADMIN_PASS;
   json["ntp_server"] = _NTP_SERVER;
   json["timezone"] = _TIMEZONE;
+  json["sched1_time"] = _SCHED1_TIME;
+  json["sched1_duration"] = _SCHED1_DURATION;
+  json["sched1_pin"] = _SCHED1_PIN;
   openFS();
   File configFile = SPIFFS.open(_CONFIG, "w");
   int error = 0;
@@ -480,7 +680,7 @@ void handle_configure() {
   json.printTo(configFile);
   closeFS();
   if (error == 0) {
-    server.send(200, F("text/plain"), F("[OK]"));
+    server.send(200, F("text/html"), F("<meta http-equiv=\"refresh\" content=\"5; url=/\" />[OK]"));
   } else {
     server.send(200, F("text/plain"), F("[ERR]"));
   }
@@ -531,10 +731,6 @@ void checkforupdate() {
   server.send(200, F("text/plain"), F("Checking for update..."));
 }
 
-void switchpin(int pin, int state) {
-  digitalWrite(pin, state);
-}
-
 void onMqttConnect(bool sessionPresent) {
   String subs = _HOSTNAME + "/set/#";
   mqttClient.subscribe(subs.c_str(), 2);
@@ -546,7 +742,7 @@ void onMqttDisconnect(AsyncMqttClientDisconnectReason reason) {
     IPAddress mqttIP;
     WiFi.hostByName(_MQTT_SERVER.c_str(), mqttIP);
     Serial.println(String("Connecting to MQTT broker " + _MQTT_SERVER + ", resolved to " + mqttIP.toString()));
-    mqttClient.setServer(mqttIP, _MQTT_SERVERPORT.toInt());
+    mqttClient.setServer(mqttIP, _MQTT_SERVERPORT);
     mqtt_lastReconnectAttempt = currentMillis;
     mqttClient.connect();
   }
@@ -556,7 +752,7 @@ void onMqttSubscribe(uint16_t packetId, uint8_t qos) {
 }
 void onMqttMessage(char* topic, char* payload, AsyncMqttClientMessageProperties properties, size_t len, size_t index, size_t total) {
   String msg = String(topic);
-  msg = msg.substring(msg.indexOf('/set/'));
+  msg = msg.substring(msg.indexOf("/set/"));
   Serial.println(String("Received: " + msg + "=" + payload));
   if (msg == "/set/pin1") {
     if ((char)payload[0] == '0') switchpin(_PIN1, 0);
@@ -611,7 +807,7 @@ void wifi_connect() {
         Serial.println(F("[ERR] Too much... Restart!"));
         ESP.restart();
       }
-      if (digitalRead(_PIN_RESET)==0) return;
+      if (digitalRead(_PIN_RESET) == 0) return;
     }
     Serial.println("OK");
   }
@@ -639,6 +835,7 @@ void setup()
   server.on("/config.json", handle_showconfig);
   server.on("/check", checkforupdate);
   server.on("/data", get_data);
+  server.on("/gpio", html_gpio);
   server.on("/", html_root);
   server.on("/favicon.svg", html_favicon);
   server.begin();
@@ -655,7 +852,7 @@ void setup()
     mqttClient.onDisconnect(onMqttDisconnect);
     mqttClient.onSubscribe(onMqttSubscribe);
     mqttClient.onMessage(onMqttMessage);
-    mqttClient.setServer(mqttIP, _MQTT_SERVERPORT.toInt());
+    mqttClient.setServer(mqttIP, _MQTT_SERVERPORT);
     mqttClient.setKeepAlive(5).setCleanSession(false).setWill(String(_HOSTNAME + "/status/online").c_str(), 2, true, "0").setCredentials(_MQTT_USERNAME.c_str(), _MQTT_KEY.c_str()).setClientId(_HOSTNAME.c_str());
     Serial.print(F("Connecting to MQTT broker "));
     Serial.print(_MQTT_SERVER);
@@ -676,7 +873,7 @@ void setup()
 
 
 void loop() {
-//  unsigned long currentMillis = millis();
+  //  unsigned long currentMillis = millis();
   server.handleClient();
 
   // FACTORY RESET
@@ -697,13 +894,14 @@ void loop() {
   if (digitalRead(_PIN_RESET) == 0) {
     if (switch_press == 0)
       switch_press = millis();
-    if ((millis() - switch_press >= 200) and (!switch_press_done)) {
+    if ((millis() - switch_press >= 50) and (!switch_press_done)) {
       (digitalRead(_PIN1) == 0) ? (switchpin(_PIN1, 1)) : (switchpin(_PIN1, 0));
+      mqttClient.publish(String(_HOSTNAME + "/set/pin1").c_str(), 1, true, String(digitalRead(_PIN1)).c_str());
       mqttClient.publish(String(_HOSTNAME + "/status/pin1").c_str(), 1, true, String(digitalRead(_PIN1)).c_str());
       switch_press_done = true;
     }
   } else {
-    switch_press = millis()+1000;
+    switch_press = 0;
     switch_press_done = false;
   }
 
@@ -736,18 +934,22 @@ void loop() {
     char c = Serial.read();
     if (c == '1') {
       (digitalRead(_PIN1) == 0) ? (switchpin(_PIN1, 1)) : (switchpin(_PIN1, 0));
+      mqttClient.publish(String(_HOSTNAME + "/set/pin1").c_str(), 1, true, String(digitalRead(_PIN1)).c_str());
       mqttClient.publish(String(_HOSTNAME + "/status/pin1").c_str(), 1, true, String(digitalRead(_PIN1)).c_str());
     }
     if (c == '2') {
       (digitalRead(_PIN2) == 0) ? (switchpin(_PIN2, 1)) : (switchpin(_PIN2, 0));
+      mqttClient.publish(String(_HOSTNAME + "/set/pin2").c_str(), 1, true, String(digitalRead(_PIN2)).c_str());
       mqttClient.publish(String(_HOSTNAME + "/status/pin2").c_str(), 1, true, String(digitalRead(_PIN2)).c_str());
     }
     if (c == '3') {
       (digitalRead(_PIN3) == 0) ? (switchpin(_PIN3, 1)) : (switchpin(_PIN3, 0));
+      mqttClient.publish(String(_HOSTNAME + "/set/pin3").c_str(), 1, true, String(digitalRead(_PIN3)).c_str());
       mqttClient.publish(String(_HOSTNAME + "/status/pin3").c_str(), 1, true, String(digitalRead(_PIN3)).c_str());
     }
     if (c == '4') {
       (digitalRead(_PIN4) == 0) ? (switchpin(_PIN4, 1)) : (switchpin(_PIN4, 0));
+      mqttClient.publish(String(_HOSTNAME + "/set/pin4").c_str(), 1, true, String(digitalRead(_PIN4)).c_str());
       mqttClient.publish(String(_HOSTNAME + "/status/pin4").c_str(), 1, true, String(digitalRead(_PIN4)).c_str());
     }
     if (c == 'w') {
