@@ -12,7 +12,7 @@
 ADC_MODE(ADC_VCC);  //read supply voltage by ESP.getVcc()
 
 //Main configuration
-const char* _VERSION = "0.14";
+const char* _VERSION = "0.15";
 const char* _PRODUCT = "Chupa";
 String _HOSTNAME = "";
 const char* _UPDATE_SERVER = "chupa.kandev.com";
@@ -29,9 +29,9 @@ String _NTP_SERVER;
 const unsigned int _WIFI_TIMEOUT = 300;
 const unsigned int _MQTT_TIMEOUT = 600;
 String _TIMEZONE;
-String _SCHED1_TIME;
-unsigned int _SCHED1_DURATION;
-byte _SCHED1_PIN;
+String _SCHED1_TIME,_SCHED2_TIME,_SCHED3_TIME,_SCHED4_TIME;
+unsigned int _SCHED1_DURATION,_SCHED2_DURATION,_SCHED3_DURATION,_SCHED4_DURATION;
+byte _SCHED1_PIN,_SCHED2_PIN,_SCHED3_PIN,_SCHED4_PIN;
 
 const byte _PIN_RESET = 0;
 const byte _PIN_LED = 2;
@@ -125,6 +125,7 @@ select {
   border-radius: 4px;
   color: #fff;
   margin:0;
+  margin-left:2px;
   width: 156px;
 }
 input[type=submit] {
@@ -227,18 +228,43 @@ fieldset legend {
   </fieldset>
   <fieldset style="height:180px;">
   <legend>Daily schedule</legend>
-    <label for="sched1_time">Time [HH:MM]:</label><br>
-    <input type="text" name="sched1_time" id="sched1_time" value=""><br>
-    <label for="sched1_duration">Duration in minutes:</label><br>
-    <input type="text" name="sched1_duration" id="sched1_duration" value=""><br>
-    <label for="sched1_gpio">Output:</label><br>
-    <select name="sched1_pin" id="sched1_pin">
-  <option value="0">none</option>
-  <option value="1">1</option>
-  <option value="2">2</option>
-  <option value="3">3</option>
-  <option value="4">4</option>
-  </select></td></tr>
+     <label><span style="width:40px;margin-left:2px;">[HH:MM]</span><span style="width:40px;margin-left:10px;">Output</span><span style="width:40px;margin-left:14px;">Timeout</span></label><br>
+
+    <input type="text" name="sched1_time" id="sched1_time" value="" style="width:40px;">
+    <select name="sched1_pin" id="sched1_pin" style="width:40px;">
+  <option value="0">off</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option>
+  </select>
+    <select name="sched1_duration" id="sched1_duration" style="width:50px;">
+  <option value="0">off</option><option value="5">5min</option><option value="10">10min</option><option value="15">15min</option><option value="30">30min</option><option value="45">45min</option>
+  <option value="60">1h</option><option value="120">2h</option><option value="180">3h</option><option value="240">4h</option><option value="360">6h</option><option value="480">8h</option><option value="720">12h</option>
+  </select>
+<br>
+    <input type="text" name="sched2_time" id="sched2_time" value="" style="width:40px;">
+    <select name="sched2_pin" id="sched2_pin" style="width:40px;">
+  <option value="0">off</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option>
+  </select>
+    <select name="sched2_duration" id="sched2_duration" style="width:50px;">
+  <option value="0">off</option><option value="5">5min</option><option value="10">10min</option><option value="15">15min</option><option value="30">30min</option><option value="45">45min</option>
+  <option value="60">1h</option><option value="120">2h</option><option value="180">3h</option><option value="240">4h</option><option value="360">6h</option><option value="480">8h</option><option value="720">12h</option>
+  </select>
+<br>
+    <input type="text" name="sched3_time" id="sched3_time" value="" style="width:40px;">
+    <select name="sched3_pin" id="sched3_pin" style="width:40px;">
+  <option value="0">off</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option>
+  </select>
+    <select name="sched3_duration" id="sched3_duration" style="width:50px;">
+  <option value="0">off</option><option value="5">5min</option><option value="10">10min</option><option value="15">15min</option><option value="30">30min</option><option value="45">45min</option>
+  <option value="60">1h</option><option value="120">2h</option><option value="180">3h</option><option value="240">4h</option><option value="360">6h</option><option value="480">8h</option><option value="720">12h</option>
+  </select>
+<br>
+    <input type="text" name="sched4_time" id="sched4_time" value="" style="width:40px;">
+    <select name="sched4_pin" id="sched4_pin" style="width:40px;">
+  <option value="0">off</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option>
+  </select>
+    <select name="sched4_duration" id="sched4_duration" style="width:50px;">
+  <option value="1">1min</option><option value="5">5min</option><option value="10">10min</option><option value="15">15min</option><option value="30">30min</option><option value="45">45min</option>
+  <option value="60">1h</option><option value="120">2h</option><option value="180">3h</option><option value="240">4h</option><option value="360">6h</option><option value="480">8h</option><option value="720">12h</option>
+  </select>
   </fieldset>
   <fieldset style="height:180px;">
   <legend>Output Control</legend>
@@ -268,7 +294,7 @@ fieldset legend {
   <fieldset style="border: solid 1px #11ff00;">
   <legend>MQTT details</legend>
   MQTT data is accessible at topic <span style="font-weight:bold;" id="h1"></span><b>/#</b><br>
-  For managing output, ports publish like this: <span style="font-weight:bold;" id="h2"></span><b>/set/pin1=1</b> for switch ON, and 0 for switch OFF. Immediate status update will be published at topic  <span style="font-weight:bold;" id="h3"></span><b>/status/pin1=1</b>, if it's ON, or 0, if it's OFF.<br>
+  For managing output ports, publish like this: <span style="font-weight:bold;" id="h2"></span><b>/set/pin1=1</b> for switch ON, and 0 for switch OFF. Immediate status update will be published at topic  <span style="font-weight:bold;" id="h3"></span><b>/status/pin1=1</b>, if it's ON, or 0, if it's OFF.<br>
   </fieldset>
 </div>
   <script type="text/javascript">
@@ -334,6 +360,18 @@ fieldset legend {
         if (data.sched1_time!="") document.getElementById("sched1_time").value = data.sched1_time;
         if (data.sched1_duration!="") document.getElementById("sched1_duration").value = data.sched1_duration;
         if (data.sched1_pin!="") document.getElementById("sched1_pin").value = data.sched1_pin;
+
+        if (data.sched2_time!="") document.getElementById("sched2_time").value = data.sched2_time;
+        if (data.sched2_duration!="") document.getElementById("sched2_duration").value = data.sched2_duration;
+        if (data.sched2_pin!="") document.getElementById("sched2_pin").value = data.sched2_pin;
+
+        if (data.sched3_time!="") document.getElementById("sched3_time").value = data.sched3_time;
+        if (data.sched3_duration!="") document.getElementById("sched3_duration").value = data.sched3_duration;
+        if (data.sched3_pin!="") document.getElementById("sched3_pin").value = data.sched3_pin;
+
+        if (data.sched4_time!="") document.getElementById("sched4_time").value = data.sched4_time;
+        if (data.sched4_duration!="") document.getElementById("sched4_duration").value = data.sched4_duration;
+        if (data.sched4_pin!="") document.getElementById("sched4_pin").value = data.sched4_pin;
       }
     };
     xhttp.open("GET", "/data", true);
@@ -416,9 +454,10 @@ fieldset legend {
           document.getElementById("pin4").className = "gpio_on";
         else
           document.getElementById("pin4").className = "gpio_off";
-        if (data.time!="") document.getElementById("time").textContent = data.time;
+        if (data.time!="") 
+          document.getElementById("time").textContent = data.time;
+        document.getElementById(pin).style.backgroundColor="";
       }
-      document.getElementById(pin).style.backgroundColor="";
     }
     xhttp.open("POST", "/gpio", true);
     xhttp.setRequestHeader("Content-type", "application/x-www-form-urlencoded");
@@ -501,8 +540,17 @@ bool loadConfig() {
   const char* ntp_server = json["ntp_server"];
   const char* timezone = json["timezone"];
   const char* sched1_time = json["sched1_time"];
+  const char* sched2_time = json["sched2_time"];
+  const char* sched3_time = json["sched3_time"];
+  const char* sched4_time = json["sched4_time"];
   _SCHED1_DURATION = json["sched1_duration"];
+  _SCHED2_DURATION = json["sched2_duration"];
+  _SCHED3_DURATION = json["sched3_duration"];
+  _SCHED4_DURATION = json["sched4_duration"];
   _SCHED1_PIN = json["sched1_pin"];
+  _SCHED2_PIN = json["sched2_pin"];
+  _SCHED3_PIN = json["sched3_pin"];
+  _SCHED4_PIN = json["sched4_pin"];
 
   if (String(hostname) != "")
     _HOSTNAME = hostname;
@@ -515,6 +563,9 @@ bool loadConfig() {
   _NTP_SERVER = ntp_server;
   _TIMEZONE = timezone;
   _SCHED1_TIME = sched1_time;
+  _SCHED2_TIME = sched2_time;
+  _SCHED3_TIME = sched3_time;
+  _SCHED4_TIME = sched4_time;
 
   if (_MQTT_SERVER.length() == 0) _MQTT_SERVER = "";
   if (_MQTT_USERNAME.length() == 0) _MQTT_USERNAME = "";
@@ -524,8 +575,18 @@ bool loadConfig() {
   if (_PASS.length() == 0) _PASS = "";
   if (_NTP_SERVER.length() == 0) _NTP_SERVER = "bg.pool.ntp.org";
   if (_TIMEZONE.length() == 0) _TIMEZONE = "+3";
-  if (_SCHED1_DURATION >= 1440) _SCHED1_DURATION=1439;
+  if (_SCHED1_DURATION >= 1440) _SCHED1_DURATION = 1439;
+  if (_SCHED2_DURATION >= 1440) _SCHED2_DURATION = 1439;
+  if (_SCHED3_DURATION >= 1440) _SCHED3_DURATION = 1439;
+  if (_SCHED4_DURATION >= 1440) _SCHED4_DURATION = 1439;
+  if (_SCHED1_DURATION <= 0) _SCHED1_DURATION = 1;
+  if (_SCHED2_DURATION <= 0) _SCHED2_DURATION = 1;
+  if (_SCHED3_DURATION <= 0) _SCHED3_DURATION = 1;
+  if (_SCHED4_DURATION <= 0) _SCHED4_DURATION = 1;
   if (_SCHED1_TIME.length() == 0) _SCHED1_TIME = "10:00";
+  if (_SCHED2_TIME.length() == 0) _SCHED2_TIME = "10:00";
+  if (_SCHED3_TIME.length() == 0) _SCHED3_TIME = "10:00";
+  if (_SCHED4_TIME.length() == 0) _SCHED4_TIME = "10:00";
 
   Serial.print(F("SSID: "));
   Serial.println(_SSID);
@@ -569,8 +630,17 @@ void get_data() {
         \"pin3\":\"" + digitalRead(_PIN3) + "\", \
         \"pin4\":\"" + digitalRead(_PIN4) + "\", \
         \"sched1_time\":\"" + _SCHED1_TIME + "\", \
+        \"sched2_time\":\"" + _SCHED2_TIME + "\", \
+        \"sched3_time\":\"" + _SCHED3_TIME + "\", \
+        \"sched4_time\":\"" + _SCHED4_TIME + "\", \
         \"sched1_duration\":\"" + _SCHED1_DURATION + "\", \
+        \"sched2_duration\":\"" + _SCHED2_DURATION + "\", \
+        \"sched3_duration\":\"" + _SCHED3_DURATION + "\", \
+        \"sched4_duration\":\"" + _SCHED4_DURATION + "\", \
         \"sched1_pin\":\"" + _SCHED1_PIN + "\", \
+        \"sched2_pin\":\"" + _SCHED2_PIN + "\", \
+        \"sched3_pin\":\"" + _SCHED3_PIN + "\", \
+        \"sched4_pin\":\"" + _SCHED4_PIN + "\", \
         \"wifis\":" + wifis + \
                 "}" );
 }
@@ -968,4 +1038,5 @@ void loop() {
     }
   }
   watchdog_counter = 0;
+  yield();
 }
