@@ -29,9 +29,9 @@ String _NTP_SERVER;
 const unsigned int _WIFI_TIMEOUT = 300;
 const unsigned int _MQTT_TIMEOUT = 600;
 String _TIMEZONE;
-String _SCHED1_TIME,_SCHED2_TIME,_SCHED3_TIME,_SCHED4_TIME;
-unsigned int _SCHED1_DURATION,_SCHED2_DURATION,_SCHED3_DURATION,_SCHED4_DURATION;
-byte _SCHED1_PIN,_SCHED2_PIN,_SCHED3_PIN,_SCHED4_PIN;
+String _SCHED1_TIME, _SCHED2_TIME, _SCHED3_TIME, _SCHED4_TIME;
+unsigned int _SCHED1_DURATION, _SCHED2_DURATION, _SCHED3_DURATION, _SCHED4_DURATION;
+byte _SCHED1_PIN, _SCHED2_PIN, _SCHED3_PIN, _SCHED4_PIN;
 
 const byte _PIN_RESET = 0;
 const byte _PIN_LED = 2;
@@ -69,8 +69,8 @@ ESP8266HTTPUpdateServer httpUpdater;
 AsyncMqttClient mqttClient;
 DNSServer dnsServer;
 unsigned int led_delay = 1;
-unsigned long last_wifi_connect_attempt=0;
-String code="";
+unsigned long last_wifi_connect_attempt = 0;
+String code = "";
 
 const char PAGE_favicon[] PROGMEM = R"=====(
 <svg version="1.0" id="Layer_1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px"
@@ -868,7 +868,7 @@ void wifi_connect() {
     Serial.println(_SSID.c_str());
     WiFi.mode(WIFI_STA);
     WiFi.begin(_SSID.c_str(), _PASS.c_str());
-    while ((WiFi.status() != WL_CONNECTED) && ((millis() - last_wifi_connect_attempt)<20000)) {
+    while ((WiFi.status() != WL_CONNECTED) && ((millis() - last_wifi_connect_attempt) < 20000)) {
       delay(200);
       Serial.print(".");
       digitalWrite(_PIN_LED, LOW);
@@ -882,7 +882,7 @@ void wifi_connect() {
       Serial.println("[OK] Connected.");
     } else {
       Serial.println("[ERR] Will try again in a minute.");
-      led_delay=1000;
+      led_delay = 1000;
     }
   }
 }
@@ -936,7 +936,7 @@ void setup()
     if (NTP.begin(String(_NTP_SERVER), _TIMEZONE.toInt(), true))
       Serial.println(F("[OK] NTP..."));
     else
-      Serial.println(F("[ERR] Инициализацията на NTP клиента не се получи."));
+      Serial.println(F("[ERR] NTP not initialized."));
     NTP.setInterval(3600);  //ntp sync once per hour
   } else {
     dnsServer.setTTL(300);
@@ -989,7 +989,7 @@ void loop() {
 
   if (_CLIENT) {
     //handle disconnect event
-    if ((WiFi.status() == WL_DISCONNECTED)&&(millis() - last_wifi_connect_attempt>90000)) {
+    if ((WiFi.status() == WL_DISCONNECTED) && (millis() - last_wifi_connect_attempt > 90000)) {
       Serial.println(F("[ERR] Reconnecting."));
       WiFi.disconnect();
       wifi_connect();
@@ -1013,42 +1013,56 @@ void loop() {
       (digitalRead(_PIN1) == 0) ? (switchpin(_PIN1, 1)) : (switchpin(_PIN1, 0));
       mqttClient.publish(String(_HOSTNAME + "/set/pin1").c_str(), 1, true, String(digitalRead(_PIN1)).c_str());
       mqttClient.publish(String(_HOSTNAME + "/status/pin1").c_str(), 1, true, String(digitalRead(_PIN1)).c_str());
+      Serial.print(F("PIN1 set to "));
+      Serial.println(digitalRead(_PIN1));
     }
     if (c == '2') {
       (digitalRead(_PIN2) == 0) ? (switchpin(_PIN2, 1)) : (switchpin(_PIN2, 0));
       mqttClient.publish(String(_HOSTNAME + "/set/pin2").c_str(), 1, true, String(digitalRead(_PIN2)).c_str());
       mqttClient.publish(String(_HOSTNAME + "/status/pin2").c_str(), 1, true, String(digitalRead(_PIN2)).c_str());
+      Serial.print(F("PIN2 set to "));
+      Serial.println(digitalRead(_PIN2));
     }
     if (c == '3') {
       (digitalRead(_PIN3) == 0) ? (switchpin(_PIN3, 1)) : (switchpin(_PIN3, 0));
       mqttClient.publish(String(_HOSTNAME + "/set/pin3").c_str(), 1, true, String(digitalRead(_PIN3)).c_str());
       mqttClient.publish(String(_HOSTNAME + "/status/pin3").c_str(), 1, true, String(digitalRead(_PIN3)).c_str());
+      Serial.print(F("PIN3 set to "));
+      Serial.println(digitalRead(_PIN3));
     }
     if (c == '4') {
       (digitalRead(_PIN4) == 0) ? (switchpin(_PIN4, 1)) : (switchpin(_PIN4, 0));
       mqttClient.publish(String(_HOSTNAME + "/set/pin4").c_str(), 1, true, String(digitalRead(_PIN4)).c_str());
       mqttClient.publish(String(_HOSTNAME + "/status/pin4").c_str(), 1, true, String(digitalRead(_PIN4)).c_str());
+      Serial.print(F("PIN4 set to "));
+      Serial.println(digitalRead(_PIN4));
     }
-    if (c == 'w') {
-      Serial.println(F("Scanning for wifi networks..."));
-      int w = WiFi.scanNetworks();
-      if (w == 0)
-        Serial.println(F("no wifi networks found"));
-      byte i;
-      for (i = 0; i < w; i++) {
-        Serial.print(WiFi.SSID(i));
-        Serial.print(F(" ["));
-        Serial.print(WiFi.RSSI(i));
-        Serial.println("dBi]");
+    if (c == '\r') {
+      Serial.println();
+      if (code == "w") {
+        Serial.println(F("Scanning for wifi networks..."));
+        int w = WiFi.scanNetworks();
+        if (w == 0)
+          Serial.println(F("no wifi networks found"));
+        byte i;
+        for (i = 0; i < w; i++) {
+          Serial.print(WiFi.SSID(i));
+          Serial.print(F("\t\t ["));
+          Serial.print(WiFi.RSSI(i));
+          Serial.println("dBi]");
+        }
       }
-      Serial.println();
-    }
-    if (c=='\r') {
-      Serial.println();
-      Serial.println(code);
-      code="";
+      if (code == "reset") {
+        Serial.println(F("Reset command accepted. Please wait..."));
+        digitalWrite(_PIN_LED, LOW);
+        delay(1000);
+        handle_deleteconfig();
+      }
+      Serial.print(_HOSTNAME);
+      Serial.print(">");
+      code = "";
     } else
-      code+=c;
+      code += c;
   }
   watchdog_counter = 0;
   yield();
