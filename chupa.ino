@@ -69,6 +69,8 @@ ESP8266HTTPUpdateServer httpUpdater;
 AsyncMqttClient mqttClient;
 DNSServer dnsServer;
 unsigned int led_delay = 1;
+unsigned long last_wifi_connect_attempt=0;
+String code="";
 
 const char PAGE_favicon[] PROGMEM = R"=====(
 <svg version="1.0" id="Layer_1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px"
@@ -861,25 +863,27 @@ void wifi_connect() {
     Serial.println(myIP.toString().c_str());
   } else {
     led_delay = 5000;  //if client - blink once every 5 seconds
+    last_wifi_connect_attempt = millis();
     Serial.print(F("Connecting to "));
     Serial.println(_SSID.c_str());
     WiFi.mode(WIFI_STA);
     WiFi.begin(_SSID.c_str(), _PASS.c_str());
-    unsigned long start = millis();
-    while (WiFi.status() != WL_CONNECTED) {
+    while ((WiFi.status() != WL_CONNECTED) && ((millis() - last_wifi_connect_attempt)<20000)) {
       delay(200);
       Serial.print(".");
       digitalWrite(_PIN_LED, LOW);
       delay(20);
       digitalWrite(_PIN_LED, HIGH);
       yield();
-      if ((millis() - start) / 1000 >= _WIFI_TIMEOUT) {
-        Serial.println(F("[ERR] Too much... Restart!"));
-        ESP.restart();
-      }
       if (digitalRead(_PIN_RESET) == 0) return;
     }
-    Serial.println("OK");
+    Serial.println();
+    if (WiFi.status() == WL_CONNECTED) {
+      Serial.println("[OK] Connected.");
+    } else {
+      Serial.println("[ERR] Will try again in a minute.");
+      led_delay=1000;
+    }
   }
 }
 
@@ -985,8 +989,8 @@ void loop() {
 
   if (_CLIENT) {
     //handle disconnect event
-    if (WiFi.status() == WL_DISCONNECTED) {
-      Serial.println(F("[ERR] Wifi disconnected!"));
+    if ((WiFi.status() == WL_DISCONNECTED)&&(millis() - last_wifi_connect_attempt>90000)) {
+      Serial.println(F("[ERR] Reconnecting."));
       WiFi.disconnect();
       wifi_connect();
     }
@@ -994,14 +998,17 @@ void loop() {
     //update check
     if ((millis() - last_update_check) / 1000 >= _UPDATE_CHECK_INTERVAL) {
       last_update_check = millis();
-      checkforupdate();
+      if (WiFi.status() == WL_CONNECTED)
+        checkforupdate();
     }
   } else {
-    dnsServer.processNextRequest();
+    if (WiFi.status() == WL_CONNECTED)
+      dnsServer.processNextRequest();
   }
 
   if (Serial.available()) {
     char c = Serial.read();
+    Serial.print(c);
     if (c == '1') {
       (digitalRead(_PIN1) == 0) ? (switchpin(_PIN1, 1)) : (switchpin(_PIN1, 0));
       mqttClient.publish(String(_HOSTNAME + "/set/pin1").c_str(), 1, true, String(digitalRead(_PIN1)).c_str());
@@ -1036,6 +1043,12 @@ void loop() {
       }
       Serial.println();
     }
+    if (c=='\r') {
+      Serial.println();
+      Serial.println(code);
+      code="";
+    } else
+      code+=c;
   }
   watchdog_counter = 0;
   yield();
