@@ -1,14 +1,14 @@
-#include <NtpClientLib.h>
-#include <TimeLib.h>
-#include <DNSServer.h>
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
+#include <NtpClientLib.h>
+#include <TimeLib.h>
 #include <ArduinoJson.h>
 #include "FS.h"
 #include <ESP8266HTTPUpdateServer.h>
 #include <ESP8266httpUpdate.h>
 #include <Ticker.h>
 #include <AsyncMqttClient.h>
+#include "web_static.h";
 ADC_MODE(ADC_VCC);  //read supply voltage by ESP.getVcc()
 
 //Main configuration
@@ -44,14 +44,10 @@ String _SSID;
 String _PASS;
 String _ADMIN_PASS = "";
 bool _CLIENT = false; // are we client or AP?
-const byte _CHANNEL = random(1, 13);
 const char* _CONFIG = "/config.json";
 const char* update_path = "/update";
 const char* update_username = "chupa";
 const char* update_password = "apuhc";
-IPAddress _IP(192, 168, 55, 1);
-IPAddress _MASK(255, 255, 255, 0);
-IPAddress _GATE(0, 0, 0, 0);
 IPAddress timeServerIP;
 unsigned long reset_hold = 0;
 unsigned long switch_press = 0;
@@ -67,410 +63,9 @@ Ticker secondTick;
 ESP8266WebServer server(80);
 ESP8266HTTPUpdateServer httpUpdater;
 AsyncMqttClient mqttClient;
-DNSServer dnsServer;
 unsigned int led_delay = 1;
 unsigned long last_wifi_connect_attempt = 0;
 String code = "";
-
-const char PAGE_favicon[] PROGMEM = R"=====(
-<svg version="1.0" id="Layer_1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px"
-   viewBox="0 0 150 150" enable-background="new 0 0 150 150" xml:space="preserve">
-<g>
-  <path fill="#000000" d="M74.8,48.3c-8.6,6.2-17.5,12-26.1,18.2l-0.2,0C42.1,71,21.3,85.5,8,94.6l7.5,1.2c18.8-13,44.8-31,56.6-39.3
-    c1.2-0.7,2.7-2.5,4.1-1c11.5,8,23.1,16,34.7,24c7.6,5.2,15.2,10.5,22.8,15.7l7.1-1.1l-33.6-23.7C96.3,63.2,85.7,55.6,74.8,48.3z"/>
-  <path fill="#000000" d="M40.3,64.2c11.5-8,23.1-16.1,34.7-24c11.8,8.2,23.7,16.4,35.5,24.6l16.9-29.4l-39.3,12L73,9.3L57.9,47.5
-    l-39.3-12l18,31.3c1.5-1,2.7-1.8,3.5-2.3L40.3,64.2z"/>
-  <path fill="#000000" d="M75,62.7c-10.6,7.1-32.1,22.2-49.9,34.6l20.8,3.2l-3,41L73,113.5l30.2,27.9l-3-41l23.9-3.6
-    c-6-4.2-12-8.4-18-12.5C95.8,77,85.3,70,75,62.7z M73.4,109.6c-4.1,0.1-8.1,0.1-12.2,0.1c0-4.1,0-8.1,0.1-12.2c4,0,8.1,0,12.1,0
-    C73.4,101.6,73.4,105.6,73.4,109.6z M61.2,94.4c0-4,0-8,0-12.1c4.1,0,8.1,0,12.2,0c0,4,0,8,0,12.1C69.3,94.4,65.3,94.4,61.2,94.4z
-     M88.7,82.3c0,4,0,8.1,0,12.1c-4,0-8.1,0-12.1,0c0-4.1,0-8.1,0-12.1C80.6,82.3,84.7,82.3,88.7,82.3z M76.6,109.7
-    c0-4,0-8.1,0.1-12.1c4,0,8,0,12.1,0c0,4,0,8,0.1,12.1C84.7,109.8,80.6,109.8,76.6,109.7z"/>
-</g>
-</svg>
-)=====";
-
-const char PAGE_root[] PROGMEM = R"=====(
-  <!DOCTYPE HTML><html>
-<html>
-  <head>
-    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-    <title></title>
-<style>
-body {
-  background-color: #000;
-  color: #ccc;
-  font-family: Arial;
-  font-size: 14px;
-  padding: 0px;
-  margin: 0px;
-}
-
-h3 {
-  background-color: #444444;
-  color: #ffa600;
-  margin: 0px;
-  padding: 8px;
-} 
-input[type=text] {
-  background-color: #000;
-  border: 1px solid #ffa600;
-  border-radius: 4px;
-  color: #fff;
-  margin:2px;
-  width: 150px;
-}
-select {
-  background-color: #000;
-  border: 1px solid #ffa600;
-  border-radius: 4px;
-  color: #fff;
-  margin:0;
-  margin-left:2px;
-  width: 156px;
-}
-input[type=submit] {
-  background-color: #ffa600;
-  border: 1px solid #000;
-  border-radius: 4px;
-  padding: 5px;
-  padding-left: 30px;
-  padding-right: 30px;
-  font-weight: bold;
-}
-label {
-  font-size: 0.8em;
-}
-fieldset{
-  border: solid 1px #00c8ff;  
-  float:left;
-  font-size: 0.9em;
-  margin:2px;
-}
-fieldset legend {
-  color: #fff;
-}
-.cc {
-  color: #ffa600;
-  font-size: 0.75em;
-  text-decoration: none;
-}
-.cc:hover {
-  color: #ffa600;
-  text-decoration: underline;
-}
-.data {
-  color: #ffd500;
-  font-weight: bold;
-}
-.gpio_off {
-  color: #aaa;
-  background-color: #000;
-  border: 1px solid #aaa;
-  border-radius: 4px;
-  padding: 4px;
-  padding-left: 20px;
-  padding-right: 20px;
-  font-weight: bold;
-  margin: 5px;
-}
-.gpio_on {
-  color: #000;
-  background-color: #aaa;
-  border: 1px solid #000;
-  border-radius: 4px;
-  padding: 4px;
-  padding-left: 20px;
-  padding-right: 20px;
-  font-weight: bold;
-  margin: 5px;
-}
-.gpio_on:hover {
-  border: 1px solid #fff;
-}
-.gpio_off:hover {
-  border: 1px solid #fff;
-}
-</style>
-
-  </head><body>
-  <h3>Configuration menu</h3>
-  <div style="margin:10px; width: *; overflow:hidden;"><form action="/configure" method="post">
-  <fieldset style="height:180px;">
-  <legend>General</legend>
-    <label for="hostname">Hostname:</label><br>
-    <input type="text" name="hostname" id="hostname" value=""><br>
-    <label for="dmin_password">Admin password:</label><br>
-    <input type="text" name="admin_password" id="admin_password" value=""><br>
-    <label for="ntp_server">NTP server:</label><br>
-    <input type="text" name="ntp_server" id="ntp_server" value=""><br>
-    <label for="timezone">Timezone [UTC=0]:</label><br>
-    <input type="text" name="timezone" id="timezone" value="">
-  </fieldset>
-  <fieldset style="height:180px;">
-  <legend>Wifi network</legend>
-    <label for="ssid">SSID:</label><br>
-    <input type="text" name="ssid" id="ssid" value="" list="wifis"><br>
-    <select id="wifis" size="4" onchange="document.getElementById('ssid').value=this.value;">
-    </select><br>
-    <label for="password">Password:</label><br>
-    <input type="text" name="password" id="password" value="">
-  </fieldset>
-  <fieldset style="height:180px;">
-  <legend>MQTT</legend>
-    <label for="mqtt_server">MQTT server:</label><br>
-    <input type="text" name="mqtt_server" id="mqtt_server" value=""><br>
-    <label for="mqtt_serverport">MQTT port [no SSL]:</label><br>
-    <input type="text" name="mqtt_serverport" id="mqtt_serverport" value=""><br>
-    <label for="mqtt_username">MQTT username:</label><br>
-    <input type="text" name="mqtt_username" id="mqtt_username" value=""><br>
-    <label for="mqtt_key">MQTT password:</label><br>
-    <input type="text" name="mqtt_key" id="mqtt_key" value=""></td></tr>
-  </fieldset>
-  <fieldset style="height:180px;">
-  <legend>Daily schedule</legend>
-     <label><span style="width:40px;margin-left:2px;">[HH:MM]</span><span style="width:40px;margin-left:10px;">Output</span><span style="width:40px;margin-left:14px;">Timeout</span></label><br>
-
-    <input type="text" name="sched1_time" id="sched1_time" value="" style="width:40px;">
-    <select name="sched1_pin" id="sched1_pin" style="width:40px;">
-  <option value="0">off</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option>
-  </select>
-    <select name="sched1_duration" id="sched1_duration" style="width:50px;">
-  <option value="0">off</option><option value="5">5min</option><option value="10">10min</option><option value="15">15min</option><option value="30">30min</option><option value="45">45min</option>
-  <option value="60">1h</option><option value="120">2h</option><option value="180">3h</option><option value="240">4h</option><option value="360">6h</option><option value="480">8h</option><option value="720">12h</option>
-  </select>
-<br>
-    <input type="text" name="sched2_time" id="sched2_time" value="" style="width:40px;">
-    <select name="sched2_pin" id="sched2_pin" style="width:40px;">
-  <option value="0">off</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option>
-  </select>
-    <select name="sched2_duration" id="sched2_duration" style="width:50px;">
-  <option value="0">off</option><option value="5">5min</option><option value="10">10min</option><option value="15">15min</option><option value="30">30min</option><option value="45">45min</option>
-  <option value="60">1h</option><option value="120">2h</option><option value="180">3h</option><option value="240">4h</option><option value="360">6h</option><option value="480">8h</option><option value="720">12h</option>
-  </select>
-<br>
-    <input type="text" name="sched3_time" id="sched3_time" value="" style="width:40px;">
-    <select name="sched3_pin" id="sched3_pin" style="width:40px;">
-  <option value="0">off</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option>
-  </select>
-    <select name="sched3_duration" id="sched3_duration" style="width:50px;">
-  <option value="0">off</option><option value="5">5min</option><option value="10">10min</option><option value="15">15min</option><option value="30">30min</option><option value="45">45min</option>
-  <option value="60">1h</option><option value="120">2h</option><option value="180">3h</option><option value="240">4h</option><option value="360">6h</option><option value="480">8h</option><option value="720">12h</option>
-  </select>
-<br>
-    <input type="text" name="sched4_time" id="sched4_time" value="" style="width:40px;">
-    <select name="sched4_pin" id="sched4_pin" style="width:40px;">
-  <option value="0">off</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option>
-  </select>
-    <select name="sched4_duration" id="sched4_duration" style="width:50px;">
-  <option value="1">1min</option><option value="5">5min</option><option value="10">10min</option><option value="15">15min</option><option value="30">30min</option><option value="45">45min</option>
-  <option value="60">1h</option><option value="120">2h</option><option value="180">3h</option><option value="240">4h</option><option value="360">6h</option><option value="480">8h</option><option value="720">12h</option>
-  </select>
-  </fieldset>
-  <fieldset style="height:180px;">
-  <legend>Output Control</legend>
-  <input type="button" class="gpio_off" name="pin1" id="pin1" value="Output 1" onclick="switch_pin(this.id);"><br>
-  <input type="button" class="gpio_off" name="pin2" id="pin2" value="Output 2" onclick="switch_pin(this.id);"><br>
-  <input type="button" class="gpio_off" name="pin3" id="pin3" value="Output 3" onclick="switch_pin(this.id);"><br>
-  <input type="button" class="gpio_off" name="pin4" id="pin4" value="Output 4" onclick="switch_pin(this.id);"><br>
-  </fieldset>
-  <fieldset style="border: solid 1px #11ff00; height:180px;">
-    <legend>Status</legend>
-    Version: <span class="data" id="version"></span><br>
-    MAC: <span class="data" id="mac"></span><br>
-    RSSI: <span class="data" id="rssi"></span><span class="data">dBi</span><br>
-    Vcc: <span class="data" id="vcc"></span><span class="data">V</span><br>
-    Time and date: <span class="data" id="time"></span><br>
-  </fieldset>
-  </div>
-  <div style="text-align:center;padding:15px;">
-  <input type="submit" value=" SAVE ">
-  </div>
-  </form>
-  <div style="padding:2px;">
-  <fieldset style="border: solid 1px #ff0000;">
-  <legend>Important</legend>
-  Please verify all the data before you click SAVE as there is no error correction. If you enter wrong data and the device disappears from your sight - hold GPIO0 to ground for 10 seconds (this will do factory reset).
-  </fieldset>
-  <fieldset style="border: solid 1px #11ff00;">
-  <legend>MQTT details</legend>
-  MQTT data is accessible at topic <span style="font-weight:bold;" id="h1"></span><b>/#</b><br>
-  For managing output ports, publish like this: <span style="font-weight:bold;" id="h2"></span><b>/set/pin1=1</b> for switch ON, and 0 for switch OFF. Immediate status update will be published at topic  <span style="font-weight:bold;" id="h3"></span><b>/status/pin1=1</b>, if it's ON, or 0, if it's OFF.<br>
-  </fieldset>
-</div>
-  <script type="text/javascript">
-  function updateData() {
-    var xhttp = new XMLHttpRequest();
-    xhttp.onreadystatechange = function() {
-      if (this.readyState == 4 && this.status == 200) {
-        var data = JSON.parse(this.responseText);
-        if (data.hostname!="") document.getElementById("hostname").value = data.hostname;
-        if (data.admin_password!="") document.getElementById("admin_password").value = data.admin_password;
-        if (data.ntp_server!="") document.getElementById("ntp_server").value = data.ntp_server;
-        if (data.timezone!="") document.getElementById("timezone").value = data.timezone;
-        if (data.ssid!="") document.getElementById("ssid").value = data.ssid;
-        if (data.password!="") document.getElementById("password").value = data.password;
-        if (data.mqtt_server!="") document.getElementById("mqtt_server").value = data.mqtt_server;
-        if (data.mqtt_serverport!="") document.getElementById("mqtt_serverport").value = data.mqtt_serverport;
-        if (data.mqtt_username!="") document.getElementById("mqtt_username").value = data.mqtt_username;
-        if (data.mqtt_key!="") document.getElementById("mqtt_key").value = data.mqtt_key;
-        if (data.version!="") document.getElementById("version").textContent = data.version;
-        if (data.mac!="") document.getElementById("mac").textContent = data.mac;
-        if (data.rssi!="") document.getElementById("rssi").textContent = data.rssi;
-        if (data.vc!="") document.getElementById("vcc").textContent = data.vcc;
-        if (data.time!="") document.getElementById("time").textContent = data.time;
-        if (data.hostname!="") document.getElementById("h1").textContent = data.hostname;
-        if (data.hostname!="") document.getElementById("h2").textContent = data.hostname;
-        if (data.hostname!="") document.getElementById("h3").textContent = data.hostname;
-        if (data.hostname!="") document.title = data.hostname;
-        var opts='';
-        var array=[];
-        for(var w in data.wifis){
-          array.push({ssid:w,rssi:data.wifis[w]})
-        }
-        array.sort(function(a,b){return a.rssi - b.rssi});
-        array.reverse();
-        for(var i in array) {
-          var col='#ff0000';
-          if (array[i].rssi>-90) col='#ffaa00';
-          if (array[i].rssi>-80) col='#ffff00';
-          if (array[i].rssi>-65) col='#00ff00';
-          opts+='<option value="' + array[i].ssid + '" style="color: ' + col + ';" ';
-          if (array[i].ssid==data.ssid) opts+=' selected';
-          opts+='>' + array[i].ssid + ' [' + array[i].rssi + '] ';
-          if (array[i].ssid==data.ssid) opts+='<-';
-          opts+='</option>';
-        }
-        document.getElementById("wifis").innerHTML=opts;
-        if (data.pin1=="1") 
-          document.getElementById("pin1").className = "gpio_on";
-        else
-          document.getElementById("pin1").className = "gpio_off";
-        if (data.pin2=="1")
-          document.getElementById("pin2").className = "gpio_on";
-        else
-          document.getElementById("pin2").className = "gpio_off";
-        if (data.pin3=="1")
-          document.getElementById("pin3").className = "gpio_on";
-        else
-          document.getElementById("pin3").className = "gpio_off";
-        if (data.pin4=="1")
-          document.getElementById("pin4").className = "gpio_on";
-        else
-          document.getElementById("pin4").className = "gpio_off";
-        if (data.sched1_time!="") document.getElementById("sched1_time").value = data.sched1_time;
-        if (data.sched1_duration!="") document.getElementById("sched1_duration").value = data.sched1_duration;
-        if (data.sched1_pin!="") document.getElementById("sched1_pin").value = data.sched1_pin;
-
-        if (data.sched2_time!="") document.getElementById("sched2_time").value = data.sched2_time;
-        if (data.sched2_duration!="") document.getElementById("sched2_duration").value = data.sched2_duration;
-        if (data.sched2_pin!="") document.getElementById("sched2_pin").value = data.sched2_pin;
-
-        if (data.sched3_time!="") document.getElementById("sched3_time").value = data.sched3_time;
-        if (data.sched3_duration!="") document.getElementById("sched3_duration").value = data.sched3_duration;
-        if (data.sched3_pin!="") document.getElementById("sched3_pin").value = data.sched3_pin;
-
-        if (data.sched4_time!="") document.getElementById("sched4_time").value = data.sched4_time;
-        if (data.sched4_duration!="") document.getElementById("sched4_duration").value = data.sched4_duration;
-        if (data.sched4_pin!="") document.getElementById("sched4_pin").value = data.sched4_pin;
-      }
-    };
-    xhttp.open("GET", "/data", true);
-    xhttp.send();
-  }
-  function updateDynamicData() {
-    var xhttp = new XMLHttpRequest();
-    xhttp.onreadystatechange = function() {
-      if (this.readyState == 4 && this.status == 200) {
-        var data = JSON.parse(this.responseText);
-        if (data.rssi!="") document.getElementById("rssi").textContent = data.rssi;
-        if (data.vc!="") document.getElementById("vcc").textContent = data.vcc;
-        if (data.time!="") document.getElementById("time").textContent = data.time;
-        var opts='';
-        var array=[];
-        for(var w in data.wifis){
-          array.push({ssid:w,rssi:data.wifis[w]})
-        }
-        array.sort(function(a,b){return a.rssi - b.rssi});
-        array.reverse();
-        for(var i in array) {
-          var col='#ff0000';
-          if (array[i].rssi>-90) col='#ffaa00';
-          if (array[i].rssi>-85) col='#ffff00';
-          if (array[i].rssi>-65) col='#00ff00';
-          opts+='<option value="' + array[i].ssid + '" style="color: ' + col + ';" ';
-          opts+='>' + array[i].ssid + ' [' + array[i].rssi + '] ';
-          if (array[i].ssid==data.ssid) opts+='<-';
-          opts+='</option>';
-        }
-        document.getElementById("wifis").innerHTML=opts;
-        if (data.pin1=="1") 
-          document.getElementById("pin1").className = "gpio_on";
-        else
-          document.getElementById("pin1").className = "gpio_off";
-        if (data.pin2=="1")
-          document.getElementById("pin2").className = "gpio_on";
-        else
-          document.getElementById("pin2").className = "gpio_off";
-        if (data.pin3=="1")
-          document.getElementById("pin3").className = "gpio_on";
-        else
-          document.getElementById("pin3").className = "gpio_off";
-        if (data.pin4=="1")
-          document.getElementById("pin4").className = "gpio_on";
-        else
-          document.getElementById("pin4").className = "gpio_off";
-      }
-    };
-    xhttp.open("GET", "/data", true);
-    xhttp.send();
-  }
-  updateData();
-  window.setInterval(updateDynamicData,10000);
-  
-  function switch_pin(pin) {
-    document.getElementById(pin).style.backgroundColor="#444";
-    var xhttp = new XMLHttpRequest();
-    if (document.getElementById(pin).className=="gpio_on")
-      state="0";
-    else
-      state="1";
-    var params = pin + '=' + state;
-    xhttp.onreadystatechange = function() {
-      if (this.readyState == 4 && this.status == 200) {
-        var data = JSON.parse(this.responseText);
-        if (data.pin1=="1") 
-          document.getElementById("pin1").className = "gpio_on";
-        else
-          document.getElementById("pin1").className = "gpio_off";
-        if (data.pin2=="1")
-          document.getElementById("pin2").className = "gpio_on";
-        else
-          document.getElementById("pin2").className = "gpio_off";
-        if (data.pin3=="1")
-          document.getElementById("pin3").className = "gpio_on";
-        else
-          document.getElementById("pin3").className = "gpio_off";
-        if (data.pin4=="1")
-          document.getElementById("pin4").className = "gpio_on";
-        else
-          document.getElementById("pin4").className = "gpio_off";
-        if (data.time!="") 
-          document.getElementById("time").textContent = data.time;
-        document.getElementById(pin).style.backgroundColor="";
-      }
-    }
-    xhttp.open("POST", "/gpio", true);
-    xhttp.setRequestHeader("Content-type", "application/x-www-form-urlencoded");
-    xhttp.send(params);
-  }
-  </script>
-<div style="position: fixed; bottom: 0; width: 100%; text-align: right;">
-&copy; <a class="cc" href="http://kandev.com" title="kandev.com" target="_blank">kandev.com</a>
-</div>
-  </body></html>
-  )=====";
 
 void watchdog() {
   watchdog_counter++;
@@ -603,16 +198,8 @@ void switchpin(int pin, int state) {
 void get_data() {
   if ((!server.authenticate("admin", _ADMIN_PASS.c_str())) && (_CLIENT))
     server.requestAuthentication();
-  int w = WiFi.scanNetworks();
-  String wifis = "{";
-  byte i;
-  for (i = 0; i < w; i++) {
-    wifis += "\"" + WiFi.SSID(i) + "\":\"" + WiFi.RSSI(i) + "\"";
-    if (i < w - 1) wifis += ", ";
-  }
-  wifis += "}";
-  server.send ( 200, F("application/json"), "{ \
-        \"hostname\":\"" + String(_HOSTNAME) + "\", \
+  if (_NTP_SERVER == "") _NTP_SERVER = "bg.pool.ntp.org";
+  server.send ( 200, F("application/json"), "{ \"hostname\":\"" + String(_HOSTNAME) + "\", \
         \"ssid\":\"" + String(_SSID) + "\", \
         \"ntp_server\":\"" + _NTP_SERVER + "\", \
         \"timezone\":\"" + _TIMEZONE + "\", \
@@ -631,20 +218,27 @@ void get_data() {
         \"pin2\":\"" + digitalRead(_PIN2) + "\", \
         \"pin3\":\"" + digitalRead(_PIN3) + "\", \
         \"pin4\":\"" + digitalRead(_PIN4) + "\", \
-        \"sched1_time\":\"" + _SCHED1_TIME + "\", \
-        \"sched2_time\":\"" + _SCHED2_TIME + "\", \
-        \"sched3_time\":\"" + _SCHED3_TIME + "\", \
-        \"sched4_time\":\"" + _SCHED4_TIME + "\", \
-        \"sched1_duration\":\"" + _SCHED1_DURATION + "\", \
-        \"sched2_duration\":\"" + _SCHED2_DURATION + "\", \
-        \"sched3_duration\":\"" + _SCHED3_DURATION + "\", \
-        \"sched4_duration\":\"" + _SCHED4_DURATION + "\", \
         \"sched1_pin\":\"" + _SCHED1_PIN + "\", \
         \"sched2_pin\":\"" + _SCHED2_PIN + "\", \
         \"sched3_pin\":\"" + _SCHED3_PIN + "\", \
-        \"sched4_pin\":\"" + _SCHED4_PIN + "\", \
-        \"wifis\":" + wifis + \
-                "}" );
+        \"sched4_pin\":\"" + _SCHED4_PIN + "\" \
+                }" );
+}
+
+void scan_data() {
+  if ((!server.authenticate("admin", _ADMIN_PASS.c_str())) && (_CLIENT))
+    server.requestAuthentication();
+  int w = WiFi.scanNetworks();
+  String wifis = "{";
+  byte i;
+  for (i = 0; i < w; i++) {
+    wifis += "\"" + WiFi.SSID(i) + "\":\"" + WiFi.RSSI(i) + "\"";
+    if (i < w - 1) wifis += ", ";
+  }
+  wifis += "}";
+  if (_NTP_SERVER == "") _NTP_SERVER = "bg.pool.ntp.org";
+  server.send ( 200, F("application/json"), "{ \"ssid\":\"" + String(_SSID) + "\", \
+    \"wifis\":" + wifis + " }");
 }
 
 void html_root() {
@@ -852,12 +446,13 @@ void wifi_connect() {
   if (_SSID == "") _SSID = _HOSTNAME;
   WiFi.hostname(_HOSTNAME);
   if (!_CLIENT) {
-    led_delay = 500;  //if in mode AP blink twice in a second
+    led_delay = 1000;  //if in mode AP blink faster
     Serial.printf("SSID: %s\r\n", _SSID.c_str());
     if (_PASS != "") Serial.printf("Password: %s\r\n", _PASS.c_str());
     WiFi.mode(WIFI_AP);
-    WiFi.softAP(_SSID.c_str(), _PASS.c_str(), _CHANNEL);
-    WiFi.softAPConfig(_IP, _GATE, _MASK);
+//    WiFi.setOutputPower(1);
+    WiFi.softAP(_SSID.c_str(), _PASS.c_str(), random(1, 13));
+    //WiFi.softAPConfig(_IP, _GATE, _MASK);
     IPAddress myIP = WiFi.softAPIP();
     Serial.print(F("To configure the device, please connect to the wifi network and open http://"));
     Serial.println(myIP.toString().c_str());
@@ -891,7 +486,6 @@ void setup()
 {
   //watchdog init
   secondTick.attach(1, watchdog);
-  //onboard led
   pinMode(_PIN1, OUTPUT); digitalWrite(_PIN1, LOW);
   pinMode(_PIN2, OUTPUT); digitalWrite(_PIN2, LOW);
   pinMode(_PIN3, OUTPUT); digitalWrite(_PIN3, LOW);
@@ -909,6 +503,7 @@ void setup()
   server.on("/config.json", handle_showconfig);
   server.on("/check", checkforupdate);
   server.on("/data", get_data);
+  server.on("/scan", scan_data);
   server.on("/gpio", html_gpio);
   server.on("/", html_root);
   server.on("/favicon.svg", html_favicon);
@@ -938,16 +533,11 @@ void setup()
     else
       Serial.println(F("[ERR] NTP not initialized."));
     NTP.setInterval(3600);  //ntp sync once per hour
-  } else {
-    dnsServer.setTTL(300);
-    dnsServer.setErrorReplyCode(DNSReplyCode::ServerFailure);
-    dnsServer.start(53, "*", _IP);
   }
 }
 
 
 void loop() {
-  //  unsigned long currentMillis = millis();
   server.handleClient();
 
   // FACTORY RESET
@@ -1001,11 +591,8 @@ void loop() {
       if (WiFi.status() == WL_CONNECTED)
         checkforupdate();
     }
-  } else {
-    if (WiFi.status() == WL_CONNECTED)
-      dnsServer.processNextRequest();
   }
-
+  
   if (Serial.available()) {
     char c = Serial.read();
     Serial.print(c);
