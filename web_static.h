@@ -608,6 +608,7 @@ fieldset legend {
     RSSI: <span class="data" id="rssi"></span><span class="data">dBi</span><br>
     Vcc: <span class="data" id="vcc"></span><span class="data">V</span><br>
     Time and date: <span class="data" id="time"></span><br>
+    Flash chip size: <span class="data" id="flash_size"></span><br>
   </fieldset>
   </div>
   <div style="text-align:center;padding:15px;">
@@ -646,6 +647,7 @@ fieldset legend {
         if (data.rssi!="") document.getElementById("rssi").textContent = data.rssi;
         if (data.vc!="") document.getElementById("vcc").textContent = data.vcc;
         if (data.time!="") document.getElementById("time").textContent = data.time;
+        if (data.flash_size!="") document.getElementById("flash_size").textContent = data.flash_size;
         if (data.hostname!="") document.getElementById("h1").textContent = data.hostname;
         if (data.hostname!="") document.getElementById("h2").textContent = data.hostname;
         if (data.hostname!="") document.getElementById("h3").textContent = data.hostname;

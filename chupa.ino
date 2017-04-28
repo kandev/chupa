@@ -212,6 +212,7 @@ void get_data() {
         \"version\":\"" + String(_VERSION) + "\", \
         \"rssi\":\"" + String(WiFi.RSSI()) + "\", \
         \"time\":\"" + NTP.getTimeDateString() + "\", \
+        \"flash_size\":\"" + ESP.getFlashChipRealSize()/1024 + "KB\", \
         \"mac\":\"" + getMacAddress() + "\", \
         \"vcc\":\"" + String(float(ESP.getVcc() / 1000.0)) + "\", \
         \"pin1\":\"" + digitalRead(_PIN1) + "\", \
