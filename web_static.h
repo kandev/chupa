@@ -240,18 +240,18 @@ fieldset legend {
   <option value="23">23</option>
   </select>
   <select name="sched1_m_off" id="sched1_m_off" class="sched" style="width:40px;margin-left:-2px;">
-  <option value="0">00</option>
-  <option value="5">05</option>
-  <option value="10">10</option>
-  <option value="15">15</option>
-  <option value="20">20</option>
-  <option value="25">25</option>
-  <option value="30">30</option>
-  <option value="35">35</option>
-  <option value="40">40</option>
-  <option value="45">45</option>
-  <option value="50">50</option>
-  <option value="55">55</option>
+  <option value="1">01</option>
+  <option value="6">06</option>
+  <option value="11">11</option>
+  <option value="16">16</option>
+  <option value="21">21</option>
+  <option value="26">26</option>
+  <option value="31">31</option>
+  <option value="36">36</option>
+  <option value="41">41</option>
+  <option value="46">46</option>
+  <option value="51">51</option>
+  <option value="56">56</option>
   </select>
   <select name="sched1_pin" id="sched1_pin" style="width:40px;">
   <option value="0">off</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option>
@@ -324,18 +324,18 @@ fieldset legend {
   <option value="23">23</option>
   </select>
   <select name="sched2_m_off" id="sched2_m_off" class="sched" style="width:40px;margin-left:-2px;">
-  <option value="0">00</option>
-  <option value="5">05</option>
-  <option value="10">10</option>
-  <option value="15">15</option>
-  <option value="20">20</option>
-  <option value="25">25</option>
-  <option value="30">30</option>
-  <option value="35">35</option>
-  <option value="40">40</option>
-  <option value="45">45</option>
-  <option value="50">50</option>
-  <option value="55">55</option>
+  <option value="1">01</option>
+  <option value="6">06</option>
+  <option value="11">11</option>
+  <option value="16">16</option>
+  <option value="21">21</option>
+  <option value="26">26</option>
+  <option value="31">31</option>
+  <option value="36">36</option>
+  <option value="41">41</option>
+  <option value="46">46</option>
+  <option value="51">51</option>
+  <option value="56">56</option>
   </select>
   <select name="sched2_pin" id="sched2_pin" style="width:40px;">
   <option value="0">off</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option>
@@ -408,18 +408,18 @@ fieldset legend {
   <option value="23">23</option>
   </select>
   <select name="sched3_m_off" id="sched3_m_off" class="sched" style="width:40px;margin-left:-2px;">
-  <option value="0">00</option>
-  <option value="5">05</option>
-  <option value="10">10</option>
-  <option value="15">15</option>
-  <option value="20">20</option>
-  <option value="25">25</option>
-  <option value="30">30</option>
-  <option value="35">35</option>
-  <option value="40">40</option>
-  <option value="45">45</option>
-  <option value="50">50</option>
-  <option value="55">55</option>
+  <option value="1">01</option>
+  <option value="6">06</option>
+  <option value="11">11</option>
+  <option value="16">16</option>
+  <option value="21">21</option>
+  <option value="26">26</option>
+  <option value="31">31</option>
+  <option value="36">36</option>
+  <option value="41">41</option>
+  <option value="46">46</option>
+  <option value="51">51</option>
+  <option value="56">56</option>
   </select>
   <select name="sched3_pin" id="sched3_pin" style="width:40px;">
   <option value="0">off</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option>
@@ -492,18 +492,18 @@ fieldset legend {
   <option value="23">23</option>
   </select>
   <select name="sched4_m_off" id="sched4_m_off" class="sched" style="width:40px;margin-left:-2px;">
-  <option value="0">00</option>
-  <option value="5">05</option>
-  <option value="10">10</option>
-  <option value="15">15</option>
-  <option value="20">20</option>
-  <option value="25">25</option>
-  <option value="30">30</option>
-  <option value="35">35</option>
-  <option value="40">40</option>
-  <option value="45">45</option>
-  <option value="50">50</option>
-  <option value="55">55</option>
+  <option value="1">01</option>
+  <option value="6">06</option>
+  <option value="11">11</option>
+  <option value="16">16</option>
+  <option value="21">21</option>
+  <option value="26">26</option>
+  <option value="31">31</option>
+  <option value="36">36</option>
+  <option value="41">41</option>
+  <option value="46">46</option>
+  <option value="51">51</option>
+  <option value="56">56</option>
   </select>
   <select name="sched4_pin" id="sched4_pin" style="width:40px;">
   <option value="0">off</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option>
@@ -576,18 +576,18 @@ fieldset legend {
   <option value="23">23</option>
   </select>
   <select name="sched5_m_off" id="sched5_m_off" class="sched" style="width:40px;margin-left:-2px;">
-  <option value="0">00</option>
-  <option value="5">05</option>
-  <option value="10">10</option>
-  <option value="15">15</option>
-  <option value="20">20</option>
-  <option value="25">25</option>
-  <option value="30">30</option>
-  <option value="35">35</option>
-  <option value="40">40</option>
-  <option value="45">45</option>
-  <option value="50">50</option>
-  <option value="55">55</option>
+  <option value="1">01</option>
+  <option value="6">06</option>
+  <option value="11">11</option>
+  <option value="16">16</option>
+  <option value="21">21</option>
+  <option value="26">26</option>
+  <option value="31">31</option>
+  <option value="36">36</option>
+  <option value="41">41</option>
+  <option value="46">46</option>
+  <option value="51">51</option>
+  <option value="56">56</option>
   </select>
   <select name="sched5_pin" id="sched5_pin" style="width:40px;">
   <option value="0">off</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option>

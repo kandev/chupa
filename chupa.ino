@@ -12,13 +12,13 @@
 ADC_MODE(ADC_VCC);  //read supply voltage by ESP.getVcc()
 
 //Main configuration
-const char* _VERSION = "0.15";
+const char* _VERSION = "0.171";
 const char* _PRODUCT = "Chupa";
 String _HOSTNAME = "";
 const char* _UPDATE_SERVER = "chupa.kandev.com";
 const byte _UPDATE_PORT = 80;
 const char* _UPDATE_URL = "/";
-const unsigned int _UPDATE_CHECK_INTERVAL = 300; // in seconds
+const unsigned int _UPDATE_CHECK_INTERVAL = 1800; // in seconds
 int _DEEPSLEEP_INTERVAL = 900; // in seconds
 const unsigned int _WATCHDOG_TIMEOUT = 600; // in seconds
 String _MQTT_SERVER;
@@ -27,11 +27,16 @@ String _MQTT_USERNAME;
 String _MQTT_KEY;
 String _NTP_SERVER;
 const unsigned int _WIFI_TIMEOUT = 300;
-const unsigned int _MQTT_TIMEOUT = 600;
+//const unsigned int _MQTT_TIMEOUT = 600;
 String _TIMEZONE;
-String _SCHED1_TIME, _SCHED2_TIME, _SCHED3_TIME, _SCHED4_TIME;
-unsigned int _SCHED1_DURATION, _SCHED2_DURATION, _SCHED3_DURATION, _SCHED4_DURATION;
-byte _SCHED1_PIN, _SCHED2_PIN, _SCHED3_PIN, _SCHED4_PIN;
+struct sched {
+  byte on_h;
+  byte on_m;
+  byte off_h;
+  byte off_m;
+  byte pin;
+};
+sched schedule[5];
 
 const byte _PIN_RESET = 0;
 const byte _PIN_LED = 2;
@@ -136,18 +141,31 @@ bool loadConfig() {
   const char* admin_pass = json["admin_password"];
   const char* ntp_server = json["ntp_server"];
   const char* timezone = json["timezone"];
-  const char* sched1_time = json["sched1_time"];
-  const char* sched2_time = json["sched2_time"];
-  const char* sched3_time = json["sched3_time"];
-  const char* sched4_time = json["sched4_time"];
-  _SCHED1_DURATION = json["sched1_duration"];
-  _SCHED2_DURATION = json["sched2_duration"];
-  _SCHED3_DURATION = json["sched3_duration"];
-  _SCHED4_DURATION = json["sched4_duration"];
-  _SCHED1_PIN = json["sched1_pin"];
-  _SCHED2_PIN = json["sched2_pin"];
-  _SCHED3_PIN = json["sched3_pin"];
-  _SCHED4_PIN = json["sched4_pin"];
+  schedule[0].on_h = json["s1_h_on"];
+  schedule[0].on_m = json["s1_m_on"];
+  schedule[0].off_h = json["s1_h_off"];
+  schedule[0].off_m = json["s1_m_off"];
+  schedule[0].pin = json["s1_pin"];
+  schedule[1].on_h = json["s2_h_on"];
+  schedule[1].on_m = json["s2_m_on"];
+  schedule[1].off_h = json["s2_h_off"];
+  schedule[1].off_m = json["s2_m_off"];
+  schedule[1].pin = json["s2_pin"];
+  schedule[2].on_h = json["s3_h_on"];
+  schedule[2].on_m = json["s3_m_on"];
+  schedule[2].off_h = json["s3_h_off"];
+  schedule[2].off_m = json["s3_m_off"];
+  schedule[2].pin = json["s3_pin"];
+  schedule[3].on_h = json["s4_h_on"];
+  schedule[3].on_m = json["s4_m_on"];
+  schedule[3].off_h = json["s4_h_off"];
+  schedule[3].off_m = json["s4_m_off"];
+  schedule[3].pin = json["s4_pin"];
+  schedule[4].on_h = json["s5_h_on"];
+  schedule[4].on_m = json["s5_m_on"];
+  schedule[4].off_h = json["s5_h_off"];
+  schedule[4].off_m = json["s5_m_off"];
+  schedule[4].pin = json["s5_pin"];
 
   if (String(hostname) != "")
     _HOSTNAME = hostname;
@@ -159,10 +177,6 @@ bool loadConfig() {
   _ADMIN_PASS = admin_pass;
   _NTP_SERVER = ntp_server;
   _TIMEZONE = timezone;
-  _SCHED1_TIME = sched1_time;
-  _SCHED2_TIME = sched2_time;
-  _SCHED3_TIME = sched3_time;
-  _SCHED4_TIME = sched4_time;
 
   if (_MQTT_SERVER.length() == 0) _MQTT_SERVER = "";
   if (_MQTT_USERNAME.length() == 0) _MQTT_USERNAME = "";
@@ -171,19 +185,8 @@ bool loadConfig() {
   if (_SSID.length() == 0) _SSID = "";
   if (_PASS.length() == 0) _PASS = "";
   if (_NTP_SERVER.length() == 0) _NTP_SERVER = "bg.pool.ntp.org";
-  if (_TIMEZONE.length() == 0) _TIMEZONE = "+3";
-  if (_SCHED1_DURATION >= 1440) _SCHED1_DURATION = 1439;
-  if (_SCHED2_DURATION >= 1440) _SCHED2_DURATION = 1439;
-  if (_SCHED3_DURATION >= 1440) _SCHED3_DURATION = 1439;
-  if (_SCHED4_DURATION >= 1440) _SCHED4_DURATION = 1439;
-  if (_SCHED1_DURATION <= 0) _SCHED1_DURATION = 1;
-  if (_SCHED2_DURATION <= 0) _SCHED2_DURATION = 1;
-  if (_SCHED3_DURATION <= 0) _SCHED3_DURATION = 1;
-  if (_SCHED4_DURATION <= 0) _SCHED4_DURATION = 1;
-  if (_SCHED1_TIME.length() == 0) _SCHED1_TIME = "10:00";
-  if (_SCHED2_TIME.length() == 0) _SCHED2_TIME = "10:00";
-  if (_SCHED3_TIME.length() == 0) _SCHED3_TIME = "10:00";
-  if (_SCHED4_TIME.length() == 0) _SCHED4_TIME = "10:00";
+  if (_TIMEZONE.length() == 0) _TIMEZONE = "2";
+  if (_MQTT_SERVERPORT == 0) _MQTT_SERVERPORT = 1883;
 
   Serial.print(F("SSID: "));
   Serial.println(_SSID);
@@ -212,17 +215,38 @@ void get_data() {
         \"version\":\"" + String(_VERSION) + "\", \
         \"rssi\":\"" + String(WiFi.RSSI()) + "\", \
         \"time\":\"" + NTP.getTimeDateString() + "\", \
-        \"flash_size\":\"" + ESP.getFlashChipRealSize()/1024 + "KB\", \
+        \"flash_size\":\"" + ESP.getFlashChipRealSize() / 1024 + "KB\", \
         \"mac\":\"" + getMacAddress() + "\", \
         \"vcc\":\"" + String(float(ESP.getVcc() / 1000.0)) + "\", \
         \"pin1\":\"" + digitalRead(_PIN1) + "\", \
         \"pin2\":\"" + digitalRead(_PIN2) + "\", \
         \"pin3\":\"" + digitalRead(_PIN3) + "\", \
         \"pin4\":\"" + digitalRead(_PIN4) + "\", \
-        \"sched1_pin\":\"" + _SCHED1_PIN + "\", \
-        \"sched2_pin\":\"" + _SCHED2_PIN + "\", \
-        \"sched3_pin\":\"" + _SCHED3_PIN + "\", \
-        \"sched4_pin\":\"" + _SCHED4_PIN + "\" \
+        \"sched1_pin\":\"" + schedule[0].pin + "\", \
+        \"sched1_h_on\":\"" + schedule[0].on_h + "\", \
+        \"sched1_m_on\":\"" + schedule[0].on_m + "\", \
+        \"sched1_h_off\":\"" + schedule[0].off_h + "\", \
+        \"sched1_m_off\":\"" + schedule[0].off_m + "\", \
+        \"sched2_pin\":\"" + schedule[1].pin + "\", \
+        \"sched2_h_on\":\"" + schedule[1].on_h + "\", \
+        \"sched2_m_on\":\"" + schedule[1].on_m + "\", \
+        \"sched2_h_off\":\"" + schedule[1].off_h + "\", \
+        \"sched2_m_off\":\"" + schedule[1].off_m + "\", \
+        \"sched3_pin\":\"" + schedule[2].pin + "\", \
+        \"sched3_h_on\":\"" + schedule[2].on_h + "\", \
+        \"sched3_m_on\":\"" + schedule[2].on_m + "\", \
+        \"sched3_h_off\":\"" + schedule[2].off_h + "\", \
+        \"sched3_m_off\":\"" + schedule[2].off_m + "\", \
+        \"sched4_pin\":\"" + schedule[3].pin + "\", \
+        \"sched4_h_on\":\"" + schedule[3].on_h + "\", \
+        \"sched4_m_on\":\"" + schedule[3].on_m + "\", \
+        \"sched4_h_off\":\"" + schedule[3].off_h + "\", \
+        \"sched4_m_off\":\"" + schedule[3].off_m + "\", \
+        \"sched5_pin\":\"" + schedule[4].pin + "\", \
+        \"sched5_h_on\":\"" + schedule[4].on_h + "\", \
+        \"sched5_m_on\":\"" + schedule[4].on_m + "\", \
+        \"sched5_h_off\":\"" + schedule[4].off_h + "\", \
+        \"sched5_m_off\":\"" + schedule[4].off_m + "\" \
                 }" );
 }
 
@@ -243,6 +267,8 @@ void scan_data() {
 }
 
 void html_root() {
+  if ((!server.authenticate("admin", _ADMIN_PASS.c_str())) && (_CLIENT))
+    server.requestAuthentication();
   server.send(200, F("text/html"), PAGE_root);
 }
 
@@ -307,9 +333,16 @@ void html_gpio() {
 void handle_configure() {
   if ((!server.authenticate("admin", _ADMIN_PASS.c_str())) && (_CLIENT))
     server.requestAuthentication();
+  bool newssid,newpass;
   for (int i = 0; i < server.args(); i++) {
-    if (server.argName(i) == "ssid") _SSID = server.arg(i);
-    if (server.argName(i) == "password") _PASS = server.arg(i);
+    if (server.argName(i) == "ssid") {
+      (_SSID==server.arg(i))?(newssid=false):(newssid=true);
+      _SSID = server.arg(i);
+    }
+    if (server.argName(i) == "password") {
+      (_PASS==server.arg(i))?(newpass=false):(newpass=true);
+      _PASS = server.arg(i);
+    }
     if (server.argName(i) == "hostname") _HOSTNAME = server.arg(i);
     if (server.argName(i) == "mqtt_server") _MQTT_SERVER = server.arg(i);
     if (server.argName(i) == "mqtt_serverport") _MQTT_SERVERPORT = server.arg(i).toInt();
@@ -318,9 +351,31 @@ void handle_configure() {
     if (server.argName(i) == "admin_password") _ADMIN_PASS = server.arg(i);
     if (server.argName(i) == "timezone") _TIMEZONE = server.arg(i).toInt();
     if (server.argName(i) == "ntp_server") _NTP_SERVER = server.arg(i);
-    if (server.argName(i) == "sched1_time") _SCHED1_TIME = server.arg(i);
-    if (server.argName(i) == "sched1_duration") _SCHED1_DURATION = server.arg(i).toInt();
-    if (server.argName(i) == "sched1_pin") _SCHED1_PIN = server.arg(i).toInt();
+    if (server.argName(i) == "sched1_h_on") schedule[0].on_h = server.arg(i).toInt();
+    if (server.argName(i) == "sched1_m_on") schedule[0].on_m = server.arg(i).toInt();
+    if (server.argName(i) == "sched1_h_off") schedule[0].off_h = server.arg(i).toInt();
+    if (server.argName(i) == "sched1_m_off") schedule[0].off_m = server.arg(i).toInt();
+    if (server.argName(i) == "sched1_pin") schedule[0].pin = server.arg(i).toInt();
+    if (server.argName(i) == "sched2_h_on") schedule[1].on_h = server.arg(i).toInt();
+    if (server.argName(i) == "sched2_m_on") schedule[1].on_m = server.arg(i).toInt();
+    if (server.argName(i) == "sched2_h_off") schedule[1].off_h = server.arg(i).toInt();
+    if (server.argName(i) == "sched2_m_off") schedule[1].off_m = server.arg(i).toInt();
+    if (server.argName(i) == "sched2_pin") schedule[1].pin = server.arg(i).toInt();
+    if (server.argName(i) == "sched3_h_on") schedule[2].on_h = server.arg(i).toInt();
+    if (server.argName(i) == "sched3_m_on") schedule[2].on_m = server.arg(i).toInt();
+    if (server.argName(i) == "sched3_h_off") schedule[2].off_h = server.arg(i).toInt();
+    if (server.argName(i) == "sched3_m_off") schedule[2].off_m = server.arg(i).toInt();
+    if (server.argName(i) == "sched3_pin") schedule[2].pin = server.arg(i).toInt();
+    if (server.argName(i) == "sched4_h_on") schedule[3].on_h = server.arg(i).toInt();
+    if (server.argName(i) == "sched4_m_on") schedule[3].on_m = server.arg(i).toInt();
+    if (server.argName(i) == "sched4_h_off") schedule[3].off_h = server.arg(i).toInt();
+    if (server.argName(i) == "sched4_m_off") schedule[3].off_m = server.arg(i).toInt();
+    if (server.argName(i) == "sched4_pin") schedule[3].pin = server.arg(i).toInt();
+    if (server.argName(i) == "sched5_h_on") schedule[4].on_h = server.arg(i).toInt();
+    if (server.argName(i) == "sched5_m_on") schedule[4].on_m = server.arg(i).toInt();
+    if (server.argName(i) == "sched5_h_off") schedule[4].off_h = server.arg(i).toInt();
+    if (server.argName(i) == "sched5_m_off") schedule[4].off_m = server.arg(i).toInt();
+    if (server.argName(i) == "sched5_pin") schedule[4].pin = server.arg(i).toInt();
   }
   StaticJsonBuffer<1000> jsonBuffer;
   JsonObject& json = jsonBuffer.createObject();
@@ -334,9 +389,31 @@ void handle_configure() {
   json["admin_password"] = _ADMIN_PASS;
   json["ntp_server"] = _NTP_SERVER;
   json["timezone"] = _TIMEZONE;
-  json["sched1_time"] = _SCHED1_TIME;
-  json["sched1_duration"] = _SCHED1_DURATION;
-  json["sched1_pin"] = _SCHED1_PIN;
+  json["s1_h_on"] = schedule[0].on_h;
+  json["s1_m_on"] = schedule[0].on_m;
+  json["s1_h_off"] = schedule[0].off_h;
+  json["s1_m_off"] = schedule[0].off_m;
+  json["s1_pin"] = schedule[0].pin;
+  json["s2_h_on"] = schedule[1].on_h;
+  json["s2_m_on"] = schedule[1].on_m;
+  json["s2_h_off"] = schedule[1].off_h;
+  json["s2_m_off"] = schedule[1].off_m;
+  json["s2_pin"] = schedule[1].pin;
+  json["s3_h_on"] = schedule[2].on_h;
+  json["s3_m_on"] = schedule[2].on_m;
+  json["s3_h_off"] = schedule[2].off_h;
+  json["s3_m_off"] = schedule[2].off_m;
+  json["s3_pin"] = schedule[2].pin;
+  json["s4_h_on"] = schedule[3].on_h;
+  json["s4_m_on"] = schedule[3].on_m;
+  json["s4_h_off"] = schedule[3].off_h;
+  json["s4_m_off"] = schedule[3].off_m;
+  json["s4_pin"] = schedule[3].pin;
+  json["s5_h_on"] = schedule[4].on_h;
+  json["s5_m_on"] = schedule[4].on_m;
+  json["s5_h_off"] = schedule[4].off_h;
+  json["s5_m_off"] = schedule[4].off_m;
+  json["s5_pin"] = schedule[4].pin;
   openFS();
   File configFile = SPIFFS.open(_CONFIG, "w");
   int error = 0;
@@ -351,7 +428,7 @@ void handle_configure() {
   } else {
     server.send(200, F("text/plain"), F("[ERR]"));
   }
-  ESP.restart();
+  if ((newssid)&&(newpass)) ESP.restart();
 }
 
 void handle_showconfig() {
@@ -451,7 +528,7 @@ void wifi_connect() {
     Serial.printf("SSID: %s\r\n", _SSID.c_str());
     if (_PASS != "") Serial.printf("Password: %s\r\n", _PASS.c_str());
     WiFi.mode(WIFI_AP);
-//    WiFi.setOutputPower(1);
+    //    WiFi.setOutputPower(1);
     WiFi.softAP(_SSID.c_str(), _PASS.c_str(), random(1, 13));
     //WiFi.softAPConfig(_IP, _GATE, _MASK);
     IPAddress myIP = WiFi.softAPIP();
@@ -593,7 +670,42 @@ void loop() {
         checkforupdate();
     }
   }
-  
+
+  //scheduler
+  for (byte q = 0; q < 5; q++) {
+    if (schedule[q].pin != 0) {
+      unsigned int on_time = (schedule[q].on_h * 60) + schedule[q].on_m;
+      unsigned int off_time = (schedule[q].off_h * 60) + schedule[q].off_m;
+      unsigned int time_now = (hour() * 60) + minute();
+      if (on_time < off_time) {
+        if ((time_now >= on_time) && (time_now < off_time)) {
+          if (schedule[q].pin == 1) switchpin(_PIN1, 1);
+          if (schedule[q].pin == 2) switchpin(_PIN2, 1);
+          if (schedule[q].pin == 3) switchpin(_PIN3, 1);
+          if (schedule[q].pin == 4) switchpin(_PIN4, 1);
+        } else {
+          if (schedule[q].pin == 1) switchpin(_PIN1, 0);
+          if (schedule[q].pin == 2) switchpin(_PIN2, 0);
+          if (schedule[q].pin == 3) switchpin(_PIN3, 0);
+          if (schedule[q].pin == 4) switchpin(_PIN4, 0);
+        }
+      }
+      if (on_time > off_time) {
+        if ((time_now >= off_time) && (time_now < on_time)) {
+          if (schedule[q].pin == 1) switchpin(_PIN1, 0);
+          if (schedule[q].pin == 2) switchpin(_PIN2, 0);
+          if (schedule[q].pin == 3) switchpin(_PIN3, 0);
+          if (schedule[q].pin == 4) switchpin(_PIN4, 0);
+        } else {
+          if (schedule[q].pin == 1) switchpin(_PIN1, 1);
+          if (schedule[q].pin == 2) switchpin(_PIN2, 1);
+          if (schedule[q].pin == 3) switchpin(_PIN3, 1);
+          if (schedule[q].pin == 4) switchpin(_PIN4, 1);
+        }
+      }
+    }
+  }
+
   if (Serial.available()) {
     char c = Serial.read();
     Serial.print(c);
