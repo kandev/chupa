@@ -131,7 +131,12 @@ fieldset legend {
   color: #fff;
 }
 .sched {
+  background-color: #000;
+  border: 1px solid #ffa600;
+  border-radius: 4px;
+  color: #fff;
   margin: 2px;
+  width:40px;
 }
 </style>
 
@@ -173,43 +178,43 @@ fieldset legend {
   <legend>Daily schedule</legend>
   <label><span style="width:40px;margin-left:2px;">ON [HH:MM]</span><span style="width:40px;margin-left:32px;">OFF [HH:MM]</span><span style="width:40px;margin-left:26px;">Output</span></label><br>
 
-  <input type="number" min="0" max="23" name="sched1_h_on" id="sched1_h_on" class="sched" style="width:40px;margin-right:-2px;">
-  <input type="number" min="0" max="59" name="sched1_m_on" id="sched1_m_on" class="sched" style="width:40px;margin-left:-2px;">
-  <input type="number" min="0" max="23" name="sched1_h_off" id="sched1_h_off" class="sched" style="width:40px;margin-right:-2px;">
-  <input type="number" min="0" max="59" name="sched1_m_off" id="sched1_m_off" class="sched" style="width:40px;margin-left:-2px;">
-  <select name="sched1_pin" id="sched1_pin" style="width:40px;">
+  <input type="number" min="0" max="23" name="sched1_h_on" id="sched1_h_on" class="sched" style="margin-right:-2px;">
+  <input type="number" min="0" max="59" name="sched1_m_on" id="sched1_m_on" class="sched" style="margin-left:-2px;">
+  <input type="number" min="0" max="23" name="sched1_h_off" id="sched1_h_off" class="sched" style="margin-right:-2px;">
+  <input type="number" min="0" max="59" name="sched1_m_off" id="sched1_m_off" class="sched" style="margin-left:-2px;">
+  <select name="sched1_pin" id="sched1_pin" class="sched">
   <option value="0">off</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option>
   </select>
 <br>
-  <input type="number" min="0" max="23" name="sched2_h_on" id="sched2_h_on" class="sched" style="width:40px;margin-right:-2px;">
-  <input type="number" min="0" max="59" name="sched2_m_on" id="sched2_m_on" class="sched" style="width:40px;margin-left:-2px;">
-  <input type="number" min="0" max="23" name="sched2_h_off" id="sched2_h_off" class="sched" style="width:40px;margin-right:-2px;">
-  <input type="number" min="0" max="59" name="sched2_m_off" id="sched2_m_off" class="sched" style="width:40px;margin-left:-2px;">
-  <select name="sched2_pin" id="sched2_pin" style="width:40px;">
+  <input type="number" min="0" max="23" name="sched2_h_on" id="sched2_h_on" class="sched" style="margin-right:-2px;">
+  <input type="number" min="0" max="59" name="sched2_m_on" id="sched2_m_on" class="sched" style="margin-left:-2px;">
+  <input type="number" min="0" max="23" name="sched2_h_off" id="sched2_h_off" class="sched" style="margin-right:-2px;">
+  <input type="number" min="0" max="59" name="sched2_m_off" id="sched2_m_off" class="sched" style="margin-left:-2px;">
+  <select name="sched2_pin" id="sched2_pin" class="sched">
   <option value="0">off</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option>
   </select>
 <br>
-  <input type="number" min="0" max="23" name="sched3_h_on" id="sched3_h_on" class="sched" style="width:40px;margin-right:-2px;">
-  <input type="number" min="0" max="59" name="sched3_m_on" id="sched3_m_on" class="sched" style="width:40px;margin-left:-2px;">
-  <input type="number" min="0" max="23" name="sched3_h_off" id="sched3_h_off" class="sched" style="width:40px;margin-right:-2px;">
-  <input type="number" min="0" max="59" name="sched3_m_off" id="sched3_m_off" class="sched" style="width:40px;margin-left:-2px;">
-  <select name="sched3_pin" id="sched3_pin" style="width:40px;">
+  <input type="number" min="0" max="23" name="sched3_h_on" id="sched3_h_on" class="sched" style="margin-right:-2px;">
+  <input type="number" min="0" max="59" name="sched3_m_on" id="sched3_m_on" class="sched" style="margin-left:-2px;">
+  <input type="number" min="0" max="23" name="sched3_h_off" id="sched3_h_off" class="sched" style="margin-right:-2px;">
+  <input type="number" min="0" max="59" name="sched3_m_off" id="sched3_m_off" class="sched" style="margin-left:-2px;">
+  <select name="sched3_pin" id="sched3_pin" class="sched">
   <option value="0">off</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option>
   </select>
 <br>
-  <input type="number" min="0" max="23"  name="sched4_h_on" id="sched4_h_on" class="sched" style="width:40px;margin-right:-2px;">
-  <input type="number" min="0" max="59" name="sched4_m_on" id="sched4_m_on" class="sched" style="width:40px;margin-left:-2px;">
-  <input type="number" min="0" max="23" name="sched4_h_off" id="sched4_h_off" class="sched" style="width:40px;margin-right:-2px;">
-  <input type="number" min="0" max="59" name="sched4_m_off" id="sched4_m_off" class="sched" style="width:40px;margin-left:-2px;">
-  <select name="sched4_pin" id="sched4_pin" style="width:40px;">
+  <input type="number" min="0" max="23"  name="sched4_h_on" id="sched4_h_on" class="sched" style="margin-right:-2px;">
+  <input type="number" min="0" max="59" name="sched4_m_on" id="sched4_m_on" class="sched" style="margin-left:-2px;">
+  <input type="number" min="0" max="23" name="sched4_h_off" id="sched4_h_off" class="sched" style="margin-right:-2px;">
+  <input type="number" min="0" max="59" name="sched4_m_off" id="sched4_m_off" class="sched" style="margin-left:-2px;">
+  <select name="sched4_pin" id="sched4_pin" class="sched">
   <option value="0">off</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option>
   </select>
 <br>
-  <input type="number" min="0" max="23" name="sched5_h_on" id="sched5_h_on" class="sched" style="width:40px;margin-right:-2px;">
-  <input type="number" min="0" max="59" name="sched5_m_on" id="sched5_m_on" class="sched" style="width:40px;margin-left:-2px;">
-  <input type="number" min="0" max="23" name="sched5_h_off" id="sched5_h_off" class="sched" style="width:40px;margin-right:-2px;">
-  <input type="number" min="0" max="59" name="sched5_m_off" id="sched5_m_off" class="sched" style="width:40px;margin-left:-2px;">
-  <select name="sched5_pin" id="sched5_pin" style="width:40px;">
+  <input type="number" min="0" max="23" name="sched5_h_on" id="sched5_h_on" class="sched" style="margin-right:-2px;">
+  <input type="number" min="0" max="59" name="sched5_m_on" id="sched5_m_on" class="sched" style="margin-left:-2px;">
+  <input type="number" min="0" max="23" name="sched5_h_off" id="sched5_h_off" class="sched" style="margin-right:-2px;">
+  <input type="number" min="0" max="59" name="sched5_m_off" id="sched5_m_off" class="sched" style="margin-left:-2px;">
+  <select name="sched5_pin" id="sched5_pin" class="sched">
   <option value="0">off</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option>
   </select>
 
@@ -225,10 +230,12 @@ fieldset legend {
     <legend>Status</legend>
     Version: <span class="data" id="version"></span><br>
     MAC: <span class="data" id="mac"></span><br>
-    RSSI: <span class="data" id="rssi"></span><span class="data">dBi</span><br>
-    Vcc: <span class="data" id="vcc"></span><span class="data">V</span><br>
+    RSSI: <span class="data" id="rssi"></span><span class="data"></span><br>
+    Vcc: <span class="data" id="vcc"></span><span class="data"></span><br>
     Time and date: <span class="data" id="time"></span><br>
     Flash chip size: <span class="data" id="flash_size"></span><br>
+    Temperature: <span class="data" id="temperature"></span><br>
+    Humidity: <span class="data" id="humidity"></span><br>
   </fieldset>
   </div>
   <div style="text-align:center;padding:15px;">
@@ -264,14 +271,16 @@ fieldset legend {
         if (data.mqtt_key!="") document.getElementById("mqtt_key").value = data.mqtt_key;
         if (data.version!="") document.getElementById("version").textContent = data.version;
         if (data.mac!="") document.getElementById("mac").textContent = data.mac;
-        if (data.rssi!="") document.getElementById("rssi").textContent = data.rssi;
-        if (data.vc!="") document.getElementById("vcc").textContent = data.vcc;
+        if (data.rssi!="") document.getElementById("rssi").textContent = data.rssi + 'dBi';
+        if (data.vc!="") document.getElementById("vcc").textContent = data.vcc + 'V';
         if (data.time!="") document.getElementById("time").textContent = data.time;
         if (data.flash_size!="") document.getElementById("flash_size").textContent = data.flash_size;
         if (data.hostname!="") document.getElementById("h1").textContent = data.hostname;
         if (data.hostname!="") document.getElementById("h2").textContent = data.hostname;
         if (data.hostname!="") document.getElementById("h3").textContent = data.hostname;
         if (data.hostname!="") document.title = data.hostname;
+        if (data.temperature!="") document.getElementById("temperature").textContent = data.temperature + String.fromCharCode(176) + 'C';
+        if (data.humidity!="") document.getElementById("humidity").textContent = data.humidity + '%';
         var opts='';
         var array=[];
         for(var w in data.wifis){
@@ -349,6 +358,8 @@ fieldset legend {
         if (data.rssi!="") document.getElementById("rssi").textContent = data.rssi;
         if (data.vc!="") document.getElementById("vcc").textContent = data.vcc;
         if (data.time!="") document.getElementById("time").textContent = data.time;
+        if (data.temperature!="") document.getElementById("temperature").textContent = data.temperature + String.fromCharCode(176) + 'C';
+        if (data.humidity!="") document.getElementById("humidity").textContent = data.humidity + '%';
         if (data.pin1=="1") 
           document.getElementById("pin1").className = "gpio_on";
         else

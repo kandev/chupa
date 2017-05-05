@@ -9,10 +9,18 @@
 #include <Ticker.h>
 #include <AsyncMqttClient.h>
 #include "web_static.h";
+#include <Adafruit_Sensor.h>
+#include <DHT.h>
+#include <DHT_U.h>
+#define DHTPIN 14
+#define DHTTYPE DHT22
+DHT_Unified dht(DHTPIN, DHTTYPE);
+sensors_event_t dht_tevent;
+sensors_event_t dht_hevent;
 ADC_MODE(ADC_VCC);  //read supply voltage by ESP.getVcc()
 
 //Main configuration
-const char* _VERSION = "0.171";
+const char* _VERSION = "0.172";
 const char* _PRODUCT = "Chupa";
 String _HOSTNAME = "";
 const char* _UPDATE_SERVER = "chupa.kandev.com";
@@ -246,7 +254,9 @@ void get_data() {
         \"sched5_h_on\":\"" + schedule[4].on_h + "\", \
         \"sched5_m_on\":\"" + schedule[4].on_m + "\", \
         \"sched5_h_off\":\"" + schedule[4].off_h + "\", \
-        \"sched5_m_off\":\"" + schedule[4].off_m + "\" \
+        \"sched5_m_off\":\"" + schedule[4].off_m + "\", \
+        \"temperature\":\"" + dht_tevent.temperature + "\", \
+        \"humidity\":\"" + dht_hevent.relative_humidity + "\" \
                 }" );
 }
 
@@ -333,14 +343,14 @@ void html_gpio() {
 void handle_configure() {
   if ((!server.authenticate("admin", _ADMIN_PASS.c_str())) && (_CLIENT))
     server.requestAuthentication();
-  bool newssid,newpass;
+  bool newssid, newpass;
   for (int i = 0; i < server.args(); i++) {
     if (server.argName(i) == "ssid") {
-      (_SSID==server.arg(i))?(newssid=false):(newssid=true);
+      (_SSID == server.arg(i)) ? (newssid = false) : (newssid = true);
       _SSID = server.arg(i);
     }
     if (server.argName(i) == "password") {
-      (_PASS==server.arg(i))?(newpass=false):(newpass=true);
+      (_PASS == server.arg(i)) ? (newpass = false) : (newpass = true);
       _PASS = server.arg(i);
     }
     if (server.argName(i) == "hostname") _HOSTNAME = server.arg(i);
@@ -428,7 +438,7 @@ void handle_configure() {
   } else {
     server.send(200, F("text/plain"), F("[ERR]"));
   }
-  if ((newssid)&&(newpass)) ESP.restart();
+  if ((newssid) && (newpass)) ESP.restart();
 }
 
 void handle_showconfig() {
@@ -459,6 +469,7 @@ void handle_deleteconfig() {
 void checkforupdate() {
   float vcc = ESP.getVcc() / 1000.0; // supply voltage
   Serial.println(F("Checking for update..."));
+  get_dht();
   auto ret = ESPhttpUpdate.update(_UPDATE_SERVER, _UPDATE_PORT, _UPDATE_URL, _VERSION);
   mqttClient.publish(String(_HOSTNAME + "/status/online").c_str(), 1, true, "1");
   mqttClient.publish(String(_HOSTNAME + "/status/rssi").c_str(), 1, true, String(WiFi.RSSI()).c_str());
@@ -520,6 +531,17 @@ void onMqttMessage(char* topic, char* payload, AsyncMqttClientMessageProperties 
   }
 }
 
+void get_dht() {
+  dht.temperature().getEvent(&dht_tevent);
+  if (isnan(dht_tevent.temperature)) {
+    Serial.println("Error reading temperature!");
+  }
+  dht.humidity().getEvent(&dht_hevent);
+  if (isnan(dht_hevent.relative_humidity)) {
+    Serial.println("Error reading humidity!");
+  }
+}
+
 void wifi_connect() {
   if (_SSID == "") _SSID = _HOSTNAME;
   WiFi.hostname(_HOSTNAME);
@@ -570,6 +592,8 @@ void setup()
   pinMode(_PIN4, OUTPUT); digitalWrite(_PIN4, LOW);
   pinMode(_PIN_LED, OUTPUT); digitalWrite(_PIN_LED, LOW);
   pinMode(_PIN_RESET, INPUT_PULLUP);  //factory reset
+  dht.begin();
+  get_dht();
 
   Serial.begin(115200); Serial.println();
   Serial.print(_PRODUCT);
@@ -757,6 +781,15 @@ void loop() {
         digitalWrite(_PIN_LED, LOW);
         delay(1000);
         handle_deleteconfig();
+      }
+      if (code == "?") {
+        get_dht();
+        Serial.print("Humidity: ");
+        Serial.print(dht_hevent.relative_humidity);
+        Serial.println("%");
+        Serial.print("Temperature: ");
+        Serial.print(dht_tevent.temperature);
+        Serial.println(" *C");
       }
       Serial.print(_HOSTNAME);
       Serial.print(">");
