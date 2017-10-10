@@ -10,17 +10,10 @@
 #include <AsyncMqttClient.h>
 #include "web_static.h";
 #include <Adafruit_Sensor.h>
-#include <DHT.h>
-#include <DHT_U.h>
-#define DHTPIN 14
-#define DHTTYPE DHT22
-DHT_Unified dht(DHTPIN, DHTTYPE);
-sensors_event_t dht_tevent;
-sensors_event_t dht_hevent;
 ADC_MODE(ADC_VCC);  //read supply voltage by ESP.getVcc()
 
 //Main configuration
-const char* _VERSION = "0.175";
+const char* _VERSION = "0.176";
 const char* _PRODUCT = "Chupa";
 String _HOSTNAME = "";
 const char* _UPDATE_SERVER = "chupa.kandev.com";
@@ -69,10 +62,10 @@ unsigned long blink_millis = 0;
 unsigned int mqtt_drop_count = 0;
 long last_update_check = 10000 - (_UPDATE_CHECK_INTERVAL * 1000);
 volatile int watchdog_counter = 0;
-unsigned long mqtt_lastReconnectAttempt = 0;
-unsigned long wifi_lastReconnectAttempt = 0;
 unsigned long mqtt_last = 0;
 Ticker secondTick;
+Ticker mqttReconnectTimer;
+Ticker wifiReconnectTimer;
 ESP8266WebServer server(80);
 ESP8266HTTPUpdateServer httpUpdater;
 AsyncMqttClient mqttClient;
@@ -255,8 +248,8 @@ void get_data() {
         \"sched5_m_on\":\"" + schedule[4].on_m + "\", \
         \"sched5_h_off\":\"" + schedule[4].off_h + "\", \
         \"sched5_m_off\":\"" + schedule[4].off_m + "\", \
-        \"temperature\":\"" + dht_tevent.temperature + "\", \
-        \"humidity\":\"" + dht_hevent.relative_humidity + "\" \
+        \"temperature\":\"n/a\", \
+        \"humidity\":\"n/a\" \
                 }" );
 }
 
@@ -469,7 +462,6 @@ void handle_deleteconfig() {
 void checkforupdate() {
   float vcc = ESP.getVcc() / 1000.0; // supply voltage
   Serial.println(F("Checking for update..."));
-  get_dht();
   auto ret = ESPhttpUpdate.update(_UPDATE_SERVER, _UPDATE_PORT, _UPDATE_URL, _VERSION);
   mqttClient.publish(String(_HOSTNAME + "/status/online").c_str(), 1, true, "1");
   mqttClient.publish(String(_HOSTNAME + "/status/rssi").c_str(), 1, true, String(WiFi.RSSI()).c_str());
@@ -486,21 +478,25 @@ void checkforupdate() {
   server.send(200, F("text/plain"), F("Checking for update..."));
 }
 
+void connectToMqtt() {
+  Serial.println("Connecting to MQTT...");
+  mqttReconnectTimer.detach();
+  mqttClient.connect();
+}
 void onMqttConnect(bool sessionPresent) {
   String subs = _HOSTNAME + "/set/#";
   mqttClient.subscribe(subs.c_str(), 2);
   Serial.print(String("Subscribing to: [" + subs + "]... "));
 }
 void onMqttDisconnect(AsyncMqttClientDisconnectReason reason) {
-  unsigned long currentMillis = millis();
-  if ((currentMillis - mqtt_lastReconnectAttempt) / 1000 >= 30) {
     IPAddress mqttIP;
-    WiFi.hostByName(_MQTT_SERVER.c_str(), mqttIP);
-    Serial.println(String("Connecting to MQTT broker " + _MQTT_SERVER + ", resolved to " + mqttIP.toString()));
-    mqttClient.setServer(mqttIP, _MQTT_SERVERPORT);
-    mqtt_lastReconnectAttempt = currentMillis;
-    mqttClient.connect();
-  }
+    if (WiFi.isConnected()) {
+      Serial.println("Connecting to MQTT...");
+      WiFi.hostByName(_MQTT_SERVER.c_str(), mqttIP);
+      Serial.println(String("Connecting to MQTT broker " + _MQTT_SERVER + ", resolved to " + mqttIP.toString()));
+      mqttClient.setServer(mqttIP, _MQTT_SERVERPORT);
+      mqttReconnectTimer.attach(2, connectToMqtt);
+    }
 }
 void onMqttSubscribe(uint16_t packetId, uint8_t qos) {
   Serial.println(F("[OK] MQTT subscription done!"));
@@ -531,17 +527,6 @@ void onMqttMessage(char* topic, char* payload, AsyncMqttClientMessageProperties 
   }
 }
 
-void get_dht() {
-  dht.temperature().getEvent(&dht_tevent);
-  if (isnan(dht_tevent.temperature)) {
-    Serial.println("Error reading temperature!");
-  }
-  dht.humidity().getEvent(&dht_hevent);
-  if (isnan(dht_hevent.relative_humidity)) {
-    Serial.println("Error reading humidity!");
-  }
-}
-
 void wifi_connect() {
   if (_SSID == "") _SSID = _HOSTNAME;
   WiFi.hostname(_HOSTNAME);
@@ -557,6 +542,7 @@ void wifi_connect() {
     Serial.print(F("To configure the device, please connect to the wifi network and open http://"));
     Serial.println(myIP.toString().c_str());
   } else {
+    wifiReconnectTimer.detach();
     led_delay = 5000;  //if client - blink once every 5 seconds
     last_wifi_connect_attempt = millis();
     Serial.print(F("Connecting to "));
@@ -575,6 +561,7 @@ void wifi_connect() {
     Serial.println();
     if (WiFi.status() == WL_CONNECTED) {
       Serial.println("[OK] Connected.");
+      mqttReconnectTimer.attach(2, connectToMqtt);
     } else {
       Serial.println("[ERR] Will try again in a minute.");
       led_delay = 1000;
@@ -592,8 +579,6 @@ void setup()
   pinMode(_PIN4, OUTPUT); digitalWrite(_PIN4, LOW);
   pinMode(_PIN_LED, OUTPUT); digitalWrite(_PIN_LED, LOW);
   pinMode(_PIN_RESET, INPUT_PULLUP);  //factory reset
-  dht.begin();
-  get_dht();
 
   Serial.begin(115200); Serial.println();
   Serial.print(_PRODUCT);
@@ -629,7 +614,6 @@ void setup()
     Serial.print(_MQTT_SERVER);
     Serial.print(F(", resolved to "));
     Serial.println(mqttIP.toString());
-    mqttClient.connect();
     if (NTP.begin(String(_NTP_SERVER), _TIMEZONE.toInt(), true))
       Serial.println(F("[OK] NTP..."));
     else
@@ -684,7 +668,8 @@ void loop() {
     if ((WiFi.status() == WL_DISCONNECTED) && (millis() - last_wifi_connect_attempt > 90000)) {
       Serial.println(F("[ERR] Reconnecting."));
       WiFi.disconnect();
-      wifi_connect();
+      mqttReconnectTimer.detach(); // ensure we don't reconnect to MQTT while reconnecting to Wi-Fi
+      wifiReconnectTimer.attach(2, wifi_connect);
     }
 
     //update check
@@ -781,15 +766,6 @@ void loop() {
         digitalWrite(_PIN_LED, LOW);
         delay(1000);
         handle_deleteconfig();
-      }
-      if (code == "?") {
-        get_dht();
-        Serial.print("Humidity: ");
-        Serial.print(dht_hevent.relative_humidity);
-        Serial.println("%");
-        Serial.print("Temperature: ");
-        Serial.print(dht_tevent.temperature);
-        Serial.println(" *C");
       }
       Serial.print(_HOSTNAME);
       Serial.print(">");
