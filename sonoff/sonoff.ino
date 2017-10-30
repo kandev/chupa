@@ -13,13 +13,13 @@
 ADC_MODE(ADC_VCC);  //read supply voltage by ESP.getVcc()
 
 //Main configuration
-const char* _VERSION = "0.176";
+const char* _VERSION = "0.179";
 const char* _PRODUCT = "Chupa";
 String _HOSTNAME = "";
 const char* _UPDATE_SERVER = "chupa.kandev.com";
 const byte _UPDATE_PORT = 80;
 const char* _UPDATE_URL = "/";
-const unsigned int _UPDATE_CHECK_INTERVAL = 1800; // in seconds
+const unsigned int _UPDATE_CHECK_INTERVAL = 300; // in seconds
 int _DEEPSLEEP_INTERVAL = 900; // in seconds
 const unsigned int _WATCHDOG_TIMEOUT = 600; // in seconds
 String _MQTT_SERVER;
@@ -72,6 +72,9 @@ AsyncMqttClient mqttClient;
 unsigned int led_delay = 1;
 unsigned long last_wifi_connect_attempt = 0;
 String code = "";
+String mqtt_status;
+WiFiEventHandler wifiConnectHandler;
+WiFiEventHandler wifiDisconnectHandler;
 
 void watchdog() {
   watchdog_counter++;
@@ -203,6 +206,11 @@ void get_data() {
   if ((!server.authenticate("admin", _ADMIN_PASS.c_str())) && (_CLIENT))
     server.requestAuthentication();
   if (_NTP_SERVER == "") _NTP_SERVER = "bg.pool.ntp.org";
+  if (mqttClient.connected()) {
+    mqtt_status="connected";
+  } else {
+    mqtt_status="disconnected";
+  }
   server.send ( 200, F("application/json"), "{ \"hostname\":\"" + String(_HOSTNAME) + "\", \
         \"ssid\":\"" + String(_SSID) + "\", \
         \"ntp_server\":\"" + _NTP_SERVER + "\", \
@@ -249,7 +257,8 @@ void get_data() {
         \"sched5_h_off\":\"" + schedule[4].off_h + "\", \
         \"sched5_m_off\":\"" + schedule[4].off_m + "\", \
         \"temperature\":\"n/a\", \
-        \"humidity\":\"n/a\" \
+        \"humidity\":\"n/a\", \
+        \"mqtt_status\":\"" + String(mqtt_status) + "\" \
                 }" );
 }
 
@@ -476,6 +485,9 @@ void checkforupdate() {
   mqttClient.publish(String(_HOSTNAME + "/status/pin3").c_str(), 1, true, String(digitalRead(_PIN3)).c_str());
   mqttClient.publish(String(_HOSTNAME + "/status/pin4").c_str(), 1, true, String(digitalRead(_PIN4)).c_str());
   server.send(200, F("text/plain"), F("Checking for update..."));
+  //check if mqtt is disconnected and reconnect
+  if (!mqttClient.connected())
+    mqttReconnectTimer.attach(2, connectToMqtt);
 }
 
 void connectToMqtt() {
@@ -569,6 +581,17 @@ void wifi_connect() {
   }
 }
 
+void onWifiConnect(const WiFiEventStationModeGotIP& event) {
+  Serial.println("Connected to Wi-Fi.");
+  connectToMqtt();
+}
+
+void onWifiDisconnect(const WiFiEventStationModeDisconnected& event) {
+  Serial.println("Disconnected from Wi-Fi.");
+  mqttReconnectTimer.detach(); // ensure we don't reconnect to MQTT while reconnecting to Wi-Fi
+  wifiReconnectTimer.attach(2, wifi_connect);
+}
+
 void setup()
 {
   //watchdog init
@@ -585,6 +608,8 @@ void setup()
   Serial.print(F(", "));
   Serial.println(_VERSION);
   _CLIENT = loadConfig();
+  wifiConnectHandler = WiFi.onStationModeGotIP(onWifiConnect);
+  wifiDisconnectHandler = WiFi.onStationModeDisconnected(onWifiDisconnect);
   wifi_connect();
   server.on("/configure", handle_configure);
   server.on("/config.json", handle_showconfig);
@@ -675,8 +700,9 @@ void loop() {
     //update check
     if ((millis() - last_update_check) / 1000 >= _UPDATE_CHECK_INTERVAL) {
       last_update_check = millis();
-      if (WiFi.status() == WL_CONNECTED)
+      if (WiFi.status() == WL_CONNECTED) {
         checkforupdate();
+      }
     }
   }
 
@@ -776,3 +802,4 @@ void loop() {
   watchdog_counter = 0;
   yield();
 }
+

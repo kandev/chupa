@@ -236,6 +236,7 @@ fieldset legend {
     Flash chip size: <span class="data" id="flash_size"></span><br>
     Temperature: <span class="data" id="temperature"></span><br>
     Humidity: <span class="data" id="humidity"></span><br>
+    MQTT status: <span class="data" id="mqtt_status"></span><br>
   </fieldset>
   </div>
   <div style="text-align:center;padding:15px;">
@@ -281,6 +282,7 @@ fieldset legend {
         if (data.hostname!="") document.title = data.hostname;
         if (data.temperature!="") document.getElementById("temperature").textContent = data.temperature + String.fromCharCode(176) + 'C';
         if (data.humidity!="") document.getElementById("humidity").textContent = data.humidity + '%';
+        if (data.mqtt_status!="") document.getElementById("mqtt_status").textContent = data.mqtt_status;
         var opts='';
         var array=[];
         for(var w in data.wifis){
@@ -360,6 +362,7 @@ fieldset legend {
         if (data.time!="") document.getElementById("time").textContent = data.time;
         if (data.temperature!="") document.getElementById("temperature").textContent = data.temperature + String.fromCharCode(176) + 'C';
         if (data.humidity!="") document.getElementById("humidity").textContent = data.humidity + '%';
+        if (data.mqtt_status!="") document.getElementById("mqtt_status").textContent = data.mqtt_status;
         if (data.pin1=="1") 
           document.getElementById("pin1").className = "gpio_on";
         else
