@@ -8,12 +8,12 @@
 #include <ESP8266httpUpdate.h>
 #include <Ticker.h>
 #include <AsyncMqttClient.h>
-#include "web_static.h";
+#include "web_static.h"
 #include <Adafruit_Sensor.h>
 ADC_MODE(ADC_VCC);  //read supply voltage by ESP.getVcc()
 
 //Main configuration
-const char* _VERSION = "0.179";
+const char* _VERSION = "0.183";
 const char* _PRODUCT = "Chupa";
 String _HOSTNAME = "";
 const char* _UPDATE_SERVER = "chupa.kandev.com";
@@ -30,6 +30,12 @@ String _NTP_SERVER;
 const unsigned int _WIFI_TIMEOUT = 300;
 //const unsigned int _MQTT_TIMEOUT = 600;
 String _TIMEZONE;
+String _SMTP_SERVER;
+String _SMTP_PORT;
+String _SMTP_USER;
+String _SMTP_PASS;
+String _SMTP_FROM;
+String _SMTP_TO;
 struct sched {
   byte on_h;
   byte on_m;
@@ -145,6 +151,12 @@ bool loadConfig() {
   const char* admin_pass = json["admin_password"];
   const char* ntp_server = json["ntp_server"];
   const char* timezone = json["timezone"];
+  const char* smtp_server = json["smtp_server"];
+  const char* smtp_port = json["smtp_serverport"];
+  const char* smtp_user = json["smtp_username"];
+  const char* smtp_pass = json["smtp_password"];
+  const char* smtp_from = json["smtp_from"];
+  const char* smtp_to = json["smtp_to"];
   schedule[0].on_h = json["s1_h_on"];
   schedule[0].on_m = json["s1_m_on"];
   schedule[0].off_h = json["s1_h_off"];
@@ -181,6 +193,12 @@ bool loadConfig() {
   _ADMIN_PASS = admin_pass;
   _NTP_SERVER = ntp_server;
   _TIMEZONE = timezone;
+  _SMTP_SERVER = smtp_server;
+  _SMTP_PORT = smtp_port;
+  _SMTP_USER = smtp_user;
+  _SMTP_PASS = smtp_pass;
+  _SMTP_FROM = smtp_from;
+  _SMTP_TO = smtp_to;
 
   if (_MQTT_SERVER.length() == 0) _MQTT_SERVER = "";
   if (_MQTT_USERNAME.length() == 0) _MQTT_USERNAME = "";
@@ -188,6 +206,12 @@ bool loadConfig() {
   if (_ADMIN_PASS.length() == 0) _ADMIN_PASS = "";
   if (_SSID.length() == 0) _SSID = "";
   if (_PASS.length() == 0) _PASS = "";
+  if (_SMTP_SERVER.length() == 0) _SMTP_SERVER = "";
+  if (_SMTP_PORT.length() == 0) _SMTP_PORT = "";
+  if (_SMTP_USER.length() == 0) _SMTP_USER = "";
+  if (_SMTP_PASS.length() == 0) _SMTP_PASS = "";
+  if (_SMTP_FROM.length() == 0) _SMTP_FROM = "";
+  if (_SMTP_TO.length() == 0) _SMTP_TO = "";
   if (_NTP_SERVER.length() == 0) _NTP_SERVER = "bg.pool.ntp.org";
   if (_TIMEZONE.length() == 0) _TIMEZONE = "2";
   if (_MQTT_SERVERPORT == 0) _MQTT_SERVERPORT = 1883;
@@ -220,6 +244,12 @@ void get_data() {
         \"mqtt_serverport\":\"" + _MQTT_SERVERPORT + "\", \
         \"mqtt_username\":\"" + _MQTT_USERNAME + "\", \
         \"mqtt_key\":\"" + _MQTT_KEY + "\", \
+        \"smtp_server\":\"" + _SMTP_SERVER + "\", \
+        \"smtp_serverport\":\"" + _SMTP_PORT + "\", \
+        \"smtp_username\":\"" + _SMTP_USER + "\", \
+        \"smtp_password\":\"" + _SMTP_PASS + "\", \
+        \"smtp_from\":\"" + _SMTP_FROM + "\", \
+        \"smtp_to\":\"" + _SMTP_TO + "\", \
         \"admin_password\":\"" + _ADMIN_PASS + "\", \
         \"version\":\"" + String(_VERSION) + "\", \
         \"rssi\":\"" + String(WiFi.RSSI()) + "\", \
@@ -388,6 +418,12 @@ void handle_configure() {
     if (server.argName(i) == "sched5_h_off") schedule[4].off_h = server.arg(i).toInt();
     if (server.argName(i) == "sched5_m_off") schedule[4].off_m = server.arg(i).toInt();
     if (server.argName(i) == "sched5_pin") schedule[4].pin = server.arg(i).toInt();
+    if (server.argName(i) == "smtp_server") _SMTP_SERVER = server.arg(i);
+    if (server.argName(i) == "smtp_serverport") _SMTP_PORT = server.arg(i);
+    if (server.argName(i) == "smtp_username") _SMTP_USER = server.arg(i);
+    if (server.argName(i) == "smtp_password") _SMTP_PASS = server.arg(i);
+    if (server.argName(i) == "smtp_from") _SMTP_FROM = server.arg(i);
+    if (server.argName(i) == "smtp_to") _SMTP_TO = server.arg(i);
   }
   StaticJsonBuffer<1000> jsonBuffer;
   JsonObject& json = jsonBuffer.createObject();
@@ -426,6 +462,13 @@ void handle_configure() {
   json["s5_h_off"] = schedule[4].off_h;
   json["s5_m_off"] = schedule[4].off_m;
   json["s5_pin"] = schedule[4].pin;
+  json["smtp_server"] = _SMTP_SERVER;
+  json["smtp_port"] = _SMTP_PORT;
+  json["smtp_user"] = _SMTP_USER;
+  json["smtp_pass"] = _SMTP_PASS;
+  json["smtp_from"] = _SMTP_FROM;
+  json["smtp_to"] = _SMTP_TO;
+
   openFS();
   File configFile = SPIFFS.open(_CONFIG, "w");
   int error = 0;
@@ -486,14 +529,20 @@ void checkforupdate() {
   mqttClient.publish(String(_HOSTNAME + "/status/pin4").c_str(), 1, true, String(digitalRead(_PIN4)).c_str());
   server.send(200, F("text/plain"), F("Checking for update..."));
   //check if mqtt is disconnected and reconnect
-  if (!mqttClient.connected())
-    mqttReconnectTimer.attach(2, connectToMqtt);
+  if ((!mqttClient.connected()) && (_MQTT_SERVER.length() > 0))
+    connectToMqtt();
 }
 
 void connectToMqtt() {
-  Serial.println("Connecting to MQTT...");
-  mqttReconnectTimer.detach();
-  mqttClient.connect();
+    IPAddress mqttIP;
+    if (WiFi.isConnected()) {
+      Serial.println("Connecting to MQTT...");
+      WiFi.hostByName(_MQTT_SERVER.c_str(), mqttIP);
+      Serial.println(String("Connecting to MQTT broker " + _MQTT_SERVER + ", resolved to " + mqttIP.toString()));
+      mqttClient.setServer(mqttIP, _MQTT_SERVERPORT);
+      mqttReconnectTimer.detach();
+      mqttClient.connect();
+    }
 }
 void onMqttConnect(bool sessionPresent) {
   String subs = _HOSTNAME + "/set/#";
@@ -501,14 +550,7 @@ void onMqttConnect(bool sessionPresent) {
   Serial.print(String("Subscribing to: [" + subs + "]... "));
 }
 void onMqttDisconnect(AsyncMqttClientDisconnectReason reason) {
-    IPAddress mqttIP;
-    if (WiFi.isConnected()) {
-      Serial.println("Connecting to MQTT...");
-      WiFi.hostByName(_MQTT_SERVER.c_str(), mqttIP);
-      Serial.println(String("Connecting to MQTT broker " + _MQTT_SERVER + ", resolved to " + mqttIP.toString()));
-      mqttClient.setServer(mqttIP, _MQTT_SERVERPORT);
-      mqttReconnectTimer.attach(2, connectToMqtt);
-    }
+      mqttReconnectTimer.attach(5, connectToMqtt);
 }
 void onMqttSubscribe(uint16_t packetId, uint8_t qos) {
   Serial.println(F("[OK] MQTT subscription done!"));
@@ -543,6 +585,7 @@ void wifi_connect() {
   if (_SSID == "") _SSID = _HOSTNAME;
   WiFi.hostname(_HOSTNAME);
   if (!_CLIENT) {
+    wifiReconnectTimer.detach();
     led_delay = 1000;  //if in mode AP blink faster
     Serial.printf("SSID: %s\r\n", _SSID.c_str());
     if (_PASS != "") Serial.printf("Password: %s\r\n", _PASS.c_str());
@@ -573,7 +616,8 @@ void wifi_connect() {
     Serial.println();
     if (WiFi.status() == WL_CONNECTED) {
       Serial.println("[OK] Connected.");
-      mqttReconnectTimer.attach(2, connectToMqtt);
+      if (_MQTT_SERVER.length() > 0)
+        mqttReconnectTimer.attach(5, connectToMqtt);
     } else {
       Serial.println("[ERR] Will try again in a minute.");
       led_delay = 1000;
@@ -583,13 +627,14 @@ void wifi_connect() {
 
 void onWifiConnect(const WiFiEventStationModeGotIP& event) {
   Serial.println("Connected to Wi-Fi.");
-  connectToMqtt();
+  if (_MQTT_SERVER.length() > 0)
+    mqttReconnectTimer.attach(5, connectToMqtt);
 }
 
 void onWifiDisconnect(const WiFiEventStationModeDisconnected& event) {
   Serial.println("Disconnected from Wi-Fi.");
   mqttReconnectTimer.detach(); // ensure we don't reconnect to MQTT while reconnecting to Wi-Fi
-  wifiReconnectTimer.attach(2, wifi_connect);
+  wifiReconnectTimer.attach(5, wifi_connect);
 }
 
 void setup()
@@ -694,7 +739,7 @@ void loop() {
       Serial.println(F("[ERR] Reconnecting."));
       WiFi.disconnect();
       mqttReconnectTimer.detach(); // ensure we don't reconnect to MQTT while reconnecting to Wi-Fi
-      wifiReconnectTimer.attach(2, wifi_connect);
+      wifiReconnectTimer.attach(5, wifi_connect);
     }
 
     //update check

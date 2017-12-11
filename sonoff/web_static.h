@@ -174,6 +174,23 @@ fieldset legend {
     <label for="mqtt_key">MQTT password:</label><br>
     <input type="text" name="mqtt_key" id="mqtt_key" value=""></td></tr>
   </fieldset>
+
+  <fieldset style="height:260px;">
+  <legend>SMTP</legend>
+    <label for="smtp_server">Server:</label><br>
+    <input type="text" name="smtp_server" id="smtp_server" value=""><br>
+    <label for="smtp_serverport">Port:</label><br>
+    <input type="text" name="smtp_serverport" id="smtp_serverport" value=""><br>
+    <label for="smtp_username">Username:</label><br>
+    <input type="text" name="smtp_username" id="smtp_username" value=""><br>
+    <label for="smtp_password">Password:</label><br>
+    <input type="text" name="smtp_password" id="smtp_password" value=""><br>
+    <label for="smtp_from">Mail From:</label><br>
+    <input type="text" name="smtp_from" id="smtp_from" value=""><br>
+    <label for="smtp_to">Mail To:</label><br>
+    <input type="text" name="smtp_to" id="smtp_to" value=""></td></tr>
+  </fieldset>
+
   <fieldset style="height:180px;">
   <legend>Daily schedule</legend>
   <label><span style="width:40px;margin-left:2px;">ON [HH:MM]</span><span style="width:40px;margin-left:32px;">OFF [HH:MM]</span><span style="width:40px;margin-left:26px;">Output</span></label><br>
@@ -270,6 +287,14 @@ fieldset legend {
         if (data.mqtt_serverport!="") document.getElementById("mqtt_serverport").value = data.mqtt_serverport;
         if (data.mqtt_username!="") document.getElementById("mqtt_username").value = data.mqtt_username;
         if (data.mqtt_key!="") document.getElementById("mqtt_key").value = data.mqtt_key;
+
+        if (data.smtp_server!="") document.getElementById("smtp_server").value = data.smtp_server;
+        if (data.smtp_serverport!="") document.getElementById("smtp_serverport").value = data.smtp_serverport;
+        if (data.smtp_username!="") document.getElementById("smtp_username").value = data.smtp_username;
+        if (data.smtp_password!="") document.getElementById("smtp_password").value = data.smtp_password;
+        if (data.smtp_from!="") document.getElementById("smtp_from").value = data.smtp_from;
+        if (data.smtp_to!="") document.getElementById("smtp_to").value = data.smtp_to;
+
         if (data.version!="") document.getElementById("version").textContent = data.version;
         if (data.mac!="") document.getElementById("mac").textContent = data.mac;
         if (data.rssi!="") document.getElementById("rssi").textContent = data.rssi + 'dBi';
