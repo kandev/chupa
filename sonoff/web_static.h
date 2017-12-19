@@ -488,3 +488,174 @@ fieldset legend {
   </body></html>
   )=====";
 
+void get_data() {
+  if ((!server.authenticate("admin", _ADMIN_PASS.c_str())) && (_CLIENT))
+    server.requestAuthentication();
+  if (_NTP_SERVER == "") _NTP_SERVER = "bg.pool.ntp.org";
+  if (mqttClient.connected()) {
+    mqtt_status="connected";
+  } else {
+    mqtt_status="disconnected";
+  }
+  server.send ( 200, F("application/json"), "{ \"hostname\":\"" + String(_HOSTNAME) + "\", \
+        \"ssid\":\"" + String(_SSID) + "\", \
+        \"ntp_server\":\"" + _NTP_SERVER + "\", \
+        \"timezone\":\"" + _TIMEZONE + "\", \
+        \"password\":\"" + String(_PASS) + "\", \
+        \"mqtt_server\":\"" + _MQTT_SERVER + "\", \
+        \"mqtt_serverport\":\"" + _MQTT_SERVERPORT + "\", \
+        \"mqtt_username\":\"" + _MQTT_USERNAME + "\", \
+        \"mqtt_key\":\"" + _MQTT_KEY + "\", \
+        \"smtp_server\":\"" + _SMTP_SERVER + "\", \
+        \"smtp_serverport\":\"" + _SMTP_PORT + "\", \
+        \"smtp_username\":\"" + _SMTP_USER + "\", \
+        \"smtp_password\":\"" + _SMTP_PASS + "\", \
+        \"smtp_from\":\"" + _SMTP_FROM + "\", \
+        \"smtp_to\":\"" + _SMTP_TO + "\", \
+        \"admin_password\":\"" + _ADMIN_PASS + "\", \
+        \"version\":\"" + String(_VERSION) + "\", \
+        \"rssi\":\"" + String(WiFi.RSSI()) + "\", \
+        \"time\":\"" + NTP.getTimeDateString() + "\", \
+        \"flash_size\":\"" + ESP.getFlashChipRealSize() / 1024 + "KB\", \
+        \"mac\":\"" + getMacAddress() + "\", \
+        \"vcc\":\"" + String(float(ESP.getVcc() / 1000.0)) + "\", \
+        \"pin1\":\"" + digitalRead(_PIN1) + "\", \
+        \"pin2\":\"" + digitalRead(_PIN2) + "\", \
+        \"pin3\":\"" + digitalRead(_PIN3) + "\", \
+        \"pin4\":\"" + digitalRead(_PIN4) + "\", \
+        \"sched1_pin\":\"" + schedule[0].pin + "\", \
+        \"sched1_h_on\":\"" + schedule[0].on_h + "\", \
+        \"sched1_m_on\":\"" + schedule[0].on_m + "\", \
+        \"sched1_h_off\":\"" + schedule[0].off_h + "\", \
+        \"sched1_m_off\":\"" + schedule[0].off_m + "\", \
+        \"sched2_pin\":\"" + schedule[1].pin + "\", \
+        \"sched2_h_on\":\"" + schedule[1].on_h + "\", \
+        \"sched2_m_on\":\"" + schedule[1].on_m + "\", \
+        \"sched2_h_off\":\"" + schedule[1].off_h + "\", \
+        \"sched2_m_off\":\"" + schedule[1].off_m + "\", \
+        \"sched3_pin\":\"" + schedule[2].pin + "\", \
+        \"sched3_h_on\":\"" + schedule[2].on_h + "\", \
+        \"sched3_m_on\":\"" + schedule[2].on_m + "\", \
+        \"sched3_h_off\":\"" + schedule[2].off_h + "\", \
+        \"sched3_m_off\":\"" + schedule[2].off_m + "\", \
+        \"sched4_pin\":\"" + schedule[3].pin + "\", \
+        \"sched4_h_on\":\"" + schedule[3].on_h + "\", \
+        \"sched4_m_on\":\"" + schedule[3].on_m + "\", \
+        \"sched4_h_off\":\"" + schedule[3].off_h + "\", \
+        \"sched4_m_off\":\"" + schedule[3].off_m + "\", \
+        \"sched5_pin\":\"" + schedule[4].pin + "\", \
+        \"sched5_h_on\":\"" + schedule[4].on_h + "\", \
+        \"sched5_m_on\":\"" + schedule[4].on_m + "\", \
+        \"sched5_h_off\":\"" + schedule[4].off_h + "\", \
+        \"sched5_m_off\":\"" + schedule[4].off_m + "\", \
+        \"temperature\":\"n/a\", \
+        \"humidity\":\"n/a\", \
+        \"mqtt_status\":\"" + String(mqtt_status) + "\" \
+                }" );
+}
+
+bool loadConfig() {
+  _HOSTNAME = String(_PRODUCT) + "-" + getMacAddress().substring(6);
+  _HOSTNAME.toLowerCase();
+  openFS();
+  File configFile = SPIFFS.open(_CONFIG, "r");
+  if (!configFile) {
+    Serial.println(F("[ERR] No configuration found."));
+    return false;
+  }
+
+  size_t size = configFile.size();
+  if (size > 1024) {
+    Serial.println(F("[ERR] configuration file is too large."));
+    return false;
+  }
+
+  std::unique_ptr<char[]> buf(new char[size]);
+  configFile.readBytes(buf.get(), size);
+  StaticJsonBuffer<1000> jsonBuffer;
+  JsonObject& json = jsonBuffer.parseObject(buf.get());
+
+  if (!json.success()) {
+    Serial.println(F("[ERR] Can't parse configuration file."));
+    return false;
+  }
+  const char* ssid = json["ssid"];
+  const char* pass = json["pass"];
+  const char* hostname = json["hostname"];
+  const char* mqtt_server = json["mqtt_server"];
+  _MQTT_SERVERPORT = json["mqtt_serverport"];
+  const char* mqtt_user = json["mqtt_username"];
+  const char* mqtt_key = json["mqtt_key"];
+  const char* admin_pass = json["admin_password"];
+  const char* ntp_server = json["ntp_server"];
+  const char* timezone = json["timezone"];
+  const char* smtp_server = json["smtp_server"];
+  const char* smtp_port = json["smtp_serverport"];
+  const char* smtp_user = json["smtp_username"];
+  const char* smtp_pass = json["smtp_password"];
+  const char* smtp_from = json["smtp_from"];
+  const char* smtp_to = json["smtp_to"];
+  schedule[0].on_h = json["s1_h_on"];
+  schedule[0].on_m = json["s1_m_on"];
+  schedule[0].off_h = json["s1_h_off"];
+  schedule[0].off_m = json["s1_m_off"];
+  schedule[0].pin = json["s1_pin"];
+  schedule[1].on_h = json["s2_h_on"];
+  schedule[1].on_m = json["s2_m_on"];
+  schedule[1].off_h = json["s2_h_off"];
+  schedule[1].off_m = json["s2_m_off"];
+  schedule[1].pin = json["s2_pin"];
+  schedule[2].on_h = json["s3_h_on"];
+  schedule[2].on_m = json["s3_m_on"];
+  schedule[2].off_h = json["s3_h_off"];
+  schedule[2].off_m = json["s3_m_off"];
+  schedule[2].pin = json["s3_pin"];
+  schedule[3].on_h = json["s4_h_on"];
+  schedule[3].on_m = json["s4_m_on"];
+  schedule[3].off_h = json["s4_h_off"];
+  schedule[3].off_m = json["s4_m_off"];
+  schedule[3].pin = json["s4_pin"];
+  schedule[4].on_h = json["s5_h_on"];
+  schedule[4].on_m = json["s5_m_on"];
+  schedule[4].off_h = json["s5_h_off"];
+  schedule[4].off_m = json["s5_m_off"];
+  schedule[4].pin = json["s5_pin"];
+
+  if (String(hostname) != "")
+    _HOSTNAME = hostname;
+  _SSID = ssid;
+  _PASS = pass;
+  _MQTT_SERVER = mqtt_server;
+  _MQTT_USERNAME = mqtt_user;
+  _MQTT_KEY = mqtt_key;
+  _ADMIN_PASS = admin_pass;
+  _NTP_SERVER = ntp_server;
+  _TIMEZONE = timezone;
+  _SMTP_SERVER = smtp_server;
+  _SMTP_PORT = smtp_port;
+  _SMTP_USER = smtp_user;
+  _SMTP_PASS = smtp_pass;
+  _SMTP_FROM = smtp_from;
+  _SMTP_TO = smtp_to;
+
+  if (_MQTT_SERVER.length() == 0) _MQTT_SERVER = "";
+  if (_MQTT_USERNAME.length() == 0) _MQTT_USERNAME = "";
+  if (_MQTT_KEY.length() == 0) _MQTT_KEY = "";
+  if (_ADMIN_PASS.length() == 0) _ADMIN_PASS = "";
+  if (_SSID.length() == 0) _SSID = "";
+  if (_PASS.length() == 0) _PASS = "";
+  if (_SMTP_SERVER.length() == 0) _SMTP_SERVER = "";
+  if (_SMTP_PORT.length() == 0) _SMTP_PORT = "";
+  if (_SMTP_USER.length() == 0) _SMTP_USER = "";
+  if (_SMTP_PASS.length() == 0) _SMTP_PASS = "";
+  if (_SMTP_FROM.length() == 0) _SMTP_FROM = "";
+  if (_SMTP_TO.length() == 0) _SMTP_TO = "";
+  if (_NTP_SERVER.length() == 0) _NTP_SERVER = "bg.pool.ntp.org";
+  if (_TIMEZONE.length() == 0) _TIMEZONE = "2";
+  if (_MQTT_SERVERPORT == 0) _MQTT_SERVERPORT = 1883;
+
+  Serial.print(F("SSID: "));
+  Serial.println(_SSID);
+  closeFS();
+  return true;
+}
