@@ -8,7 +8,6 @@
 #include <ESP8266httpUpdate.h>
 #include <Ticker.h>
 #include <AsyncMqttClient.h>
-#include "web_static.h"
 #include <Adafruit_Sensor.h>
 ADC_MODE(ADC_VCC);  //read supply voltage by ESP.getVcc()
 
@@ -46,7 +45,8 @@ struct sched {
 sched schedule[5];
 
 const byte _PIN_RESET = 0;
-const byte _PIN_LED = 13;
+const byte _ONBOARD_LED = 2; //2 for most nodemcu
+const byte _PIN_LED = 13; //for sonoff it is 13
 const byte _PIN1 = 12;
 const byte _PIN2 = 14;
 const byte _PIN3 = 14;
@@ -81,6 +81,7 @@ String code = "";
 String mqtt_status;
 WiFiEventHandler wifiConnectHandler;
 WiFiEventHandler wifiDisconnectHandler;
+#include "web_static.h"
 
 void watchdog() {
   watchdog_counter++;
@@ -88,6 +89,16 @@ void watchdog() {
     Serial.println("WATCHDOG!");
     ESP.restart();
   }
+}
+
+void led_on() {
+    digitalWrite(_PIN_LED, LOW);
+    digitalWrite(_ONBOARD_LED, LOW);
+}
+
+void led_off() {
+    digitalWrite(_PIN_LED, HIGH);
+    digitalWrite(_ONBOARD_LED, HIGH);
 }
 
 String getMacAddress() {
@@ -116,181 +127,10 @@ void closeFS() {
   SPIFFS.end();
 }
 
-bool loadConfig() {
-  _HOSTNAME = String(_PRODUCT) + "-" + getMacAddress().substring(6);
-  _HOSTNAME.toLowerCase();
-  openFS();
-  File configFile = SPIFFS.open(_CONFIG, "r");
-  if (!configFile) {
-    Serial.println(F("[ERR] No configuration found."));
-    return false;
-  }
-
-  size_t size = configFile.size();
-  if (size > 1024) {
-    Serial.println(F("[ERR] configuration file is too large."));
-    return false;
-  }
-
-  std::unique_ptr<char[]> buf(new char[size]);
-  configFile.readBytes(buf.get(), size);
-  StaticJsonBuffer<1000> jsonBuffer;
-  JsonObject& json = jsonBuffer.parseObject(buf.get());
-
-  if (!json.success()) {
-    Serial.println(F("[ERR] Can't parse configuration file."));
-    return false;
-  }
-  const char* ssid = json["ssid"];
-  const char* pass = json["pass"];
-  const char* hostname = json["hostname"];
-  const char* mqtt_server = json["mqtt_server"];
-  _MQTT_SERVERPORT = json["mqtt_serverport"];
-  const char* mqtt_user = json["mqtt_username"];
-  const char* mqtt_key = json["mqtt_key"];
-  const char* admin_pass = json["admin_password"];
-  const char* ntp_server = json["ntp_server"];
-  const char* timezone = json["timezone"];
-  const char* smtp_server = json["smtp_server"];
-  const char* smtp_port = json["smtp_serverport"];
-  const char* smtp_user = json["smtp_username"];
-  const char* smtp_pass = json["smtp_password"];
-  const char* smtp_from = json["smtp_from"];
-  const char* smtp_to = json["smtp_to"];
-  schedule[0].on_h = json["s1_h_on"];
-  schedule[0].on_m = json["s1_m_on"];
-  schedule[0].off_h = json["s1_h_off"];
-  schedule[0].off_m = json["s1_m_off"];
-  schedule[0].pin = json["s1_pin"];
-  schedule[1].on_h = json["s2_h_on"];
-  schedule[1].on_m = json["s2_m_on"];
-  schedule[1].off_h = json["s2_h_off"];
-  schedule[1].off_m = json["s2_m_off"];
-  schedule[1].pin = json["s2_pin"];
-  schedule[2].on_h = json["s3_h_on"];
-  schedule[2].on_m = json["s3_m_on"];
-  schedule[2].off_h = json["s3_h_off"];
-  schedule[2].off_m = json["s3_m_off"];
-  schedule[2].pin = json["s3_pin"];
-  schedule[3].on_h = json["s4_h_on"];
-  schedule[3].on_m = json["s4_m_on"];
-  schedule[3].off_h = json["s4_h_off"];
-  schedule[3].off_m = json["s4_m_off"];
-  schedule[3].pin = json["s4_pin"];
-  schedule[4].on_h = json["s5_h_on"];
-  schedule[4].on_m = json["s5_m_on"];
-  schedule[4].off_h = json["s5_h_off"];
-  schedule[4].off_m = json["s5_m_off"];
-  schedule[4].pin = json["s5_pin"];
-
-  if (String(hostname) != "")
-    _HOSTNAME = hostname;
-  _SSID = ssid;
-  _PASS = pass;
-  _MQTT_SERVER = mqtt_server;
-  _MQTT_USERNAME = mqtt_user;
-  _MQTT_KEY = mqtt_key;
-  _ADMIN_PASS = admin_pass;
-  _NTP_SERVER = ntp_server;
-  _TIMEZONE = timezone;
-  _SMTP_SERVER = smtp_server;
-  _SMTP_PORT = smtp_port;
-  _SMTP_USER = smtp_user;
-  _SMTP_PASS = smtp_pass;
-  _SMTP_FROM = smtp_from;
-  _SMTP_TO = smtp_to;
-
-  if (_MQTT_SERVER.length() == 0) _MQTT_SERVER = "";
-  if (_MQTT_USERNAME.length() == 0) _MQTT_USERNAME = "";
-  if (_MQTT_KEY.length() == 0) _MQTT_KEY = "";
-  if (_ADMIN_PASS.length() == 0) _ADMIN_PASS = "";
-  if (_SSID.length() == 0) _SSID = "";
-  if (_PASS.length() == 0) _PASS = "";
-  if (_SMTP_SERVER.length() == 0) _SMTP_SERVER = "";
-  if (_SMTP_PORT.length() == 0) _SMTP_PORT = "";
-  if (_SMTP_USER.length() == 0) _SMTP_USER = "";
-  if (_SMTP_PASS.length() == 0) _SMTP_PASS = "";
-  if (_SMTP_FROM.length() == 0) _SMTP_FROM = "";
-  if (_SMTP_TO.length() == 0) _SMTP_TO = "";
-  if (_NTP_SERVER.length() == 0) _NTP_SERVER = "bg.pool.ntp.org";
-  if (_TIMEZONE.length() == 0) _TIMEZONE = "2";
-  if (_MQTT_SERVERPORT == 0) _MQTT_SERVERPORT = 1883;
-
-  Serial.print(F("SSID: "));
-  Serial.println(_SSID);
-  closeFS();
-  return true;
-}
-
 void switchpin(int pin, int state) {
   digitalWrite(pin, state);
 }
 
-void get_data() {
-  if ((!server.authenticate("admin", _ADMIN_PASS.c_str())) && (_CLIENT))
-    server.requestAuthentication();
-  if (_NTP_SERVER == "") _NTP_SERVER = "bg.pool.ntp.org";
-  if (mqttClient.connected()) {
-    mqtt_status="connected";
-  } else {
-    mqtt_status="disconnected";
-  }
-  server.send ( 200, F("application/json"), "{ \"hostname\":\"" + String(_HOSTNAME) + "\", \
-        \"ssid\":\"" + String(_SSID) + "\", \
-        \"ntp_server\":\"" + _NTP_SERVER + "\", \
-        \"timezone\":\"" + _TIMEZONE + "\", \
-        \"password\":\"" + String(_PASS) + "\", \
-        \"mqtt_server\":\"" + _MQTT_SERVER + "\", \
-        \"mqtt_serverport\":\"" + _MQTT_SERVERPORT + "\", \
-        \"mqtt_username\":\"" + _MQTT_USERNAME + "\", \
-        \"mqtt_key\":\"" + _MQTT_KEY + "\", \
-        \"smtp_server\":\"" + _SMTP_SERVER + "\", \
-        \"smtp_serverport\":\"" + _SMTP_PORT + "\", \
-        \"smtp_username\":\"" + _SMTP_USER + "\", \
-        \"smtp_password\":\"" + _SMTP_PASS + "\", \
-        \"smtp_from\":\"" + _SMTP_FROM + "\", \
-        \"smtp_to\":\"" + _SMTP_TO + "\", \
-        \"admin_password\":\"" + _ADMIN_PASS + "\", \
-        \"version\":\"" + String(_VERSION) + "\", \
-        \"rssi\":\"" + String(WiFi.RSSI()) + "\", \
-        \"time\":\"" + NTP.getTimeDateString() + "\", \
-        \"flash_size\":\"" + ESP.getFlashChipRealSize() / 1024 + "KB\", \
-        \"mac\":\"" + getMacAddress() + "\", \
-        \"vcc\":\"" + String(float(ESP.getVcc() / 1000.0)) + "\", \
-        \"pin1\":\"" + digitalRead(_PIN1) + "\", \
-        \"pin2\":\"" + digitalRead(_PIN2) + "\", \
-        \"pin3\":\"" + digitalRead(_PIN3) + "\", \
-        \"pin4\":\"" + digitalRead(_PIN4) + "\", \
-        \"sched1_pin\":\"" + schedule[0].pin + "\", \
-        \"sched1_h_on\":\"" + schedule[0].on_h + "\", \
-        \"sched1_m_on\":\"" + schedule[0].on_m + "\", \
-        \"sched1_h_off\":\"" + schedule[0].off_h + "\", \
-        \"sched1_m_off\":\"" + schedule[0].off_m + "\", \
-        \"sched2_pin\":\"" + schedule[1].pin + "\", \
-        \"sched2_h_on\":\"" + schedule[1].on_h + "\", \
-        \"sched2_m_on\":\"" + schedule[1].on_m + "\", \
-        \"sched2_h_off\":\"" + schedule[1].off_h + "\", \
-        \"sched2_m_off\":\"" + schedule[1].off_m + "\", \
-        \"sched3_pin\":\"" + schedule[2].pin + "\", \
-        \"sched3_h_on\":\"" + schedule[2].on_h + "\", \
-        \"sched3_m_on\":\"" + schedule[2].on_m + "\", \
-        \"sched3_h_off\":\"" + schedule[2].off_h + "\", \
-        \"sched3_m_off\":\"" + schedule[2].off_m + "\", \
-        \"sched4_pin\":\"" + schedule[3].pin + "\", \
-        \"sched4_h_on\":\"" + schedule[3].on_h + "\", \
-        \"sched4_m_on\":\"" + schedule[3].on_m + "\", \
-        \"sched4_h_off\":\"" + schedule[3].off_h + "\", \
-        \"sched4_m_off\":\"" + schedule[3].off_m + "\", \
-        \"sched5_pin\":\"" + schedule[4].pin + "\", \
-        \"sched5_h_on\":\"" + schedule[4].on_h + "\", \
-        \"sched5_m_on\":\"" + schedule[4].on_m + "\", \
-        \"sched5_h_off\":\"" + schedule[4].off_h + "\", \
-        \"sched5_m_off\":\"" + schedule[4].off_m + "\", \
-        \"temperature\":\"n/a\", \
-        \"humidity\":\"n/a\", \
-        \"mqtt_status\":\"" + String(mqtt_status) + "\" \
-                }" );
-}
 
 void scan_data() {
   if ((!server.authenticate("admin", _ADMIN_PASS.c_str())) && (_CLIENT))
@@ -511,6 +351,12 @@ void handle_deleteconfig() {
   ESP.restart();
 }
 
+void handle_reboot() {
+  Serial.println(F("Restarting..."));
+  server.send(200, F("text/html"), F("<meta http-equiv=\"refresh\" content=\"5; url=/\" />[OK] Restarting..."));
+  ESP.restart();
+}
+
 void checkforupdate() {
   float vcc = ESP.getVcc() / 1000.0; // supply voltage
   Serial.println(F("Checking for update..."));
@@ -607,9 +453,9 @@ void wifi_connect() {
     while ((WiFi.status() != WL_CONNECTED) && ((millis() - last_wifi_connect_attempt) < 20000)) {
       delay(200);
       Serial.print(".");
-      digitalWrite(_PIN_LED, LOW);
+      led_on();
       delay(20);
-      digitalWrite(_PIN_LED, HIGH);
+      led_off();
       yield();
       if (digitalRead(_PIN_RESET) == 0) return;
     }
@@ -645,8 +491,10 @@ void setup()
   pinMode(_PIN2, OUTPUT); digitalWrite(_PIN2, LOW);
   pinMode(_PIN3, OUTPUT); digitalWrite(_PIN3, LOW);
   pinMode(_PIN4, OUTPUT); digitalWrite(_PIN4, LOW);
-  pinMode(_PIN_LED, OUTPUT); digitalWrite(_PIN_LED, LOW);
+  pinMode(_PIN_LED, OUTPUT);
   pinMode(_PIN_RESET, INPUT_PULLUP);  //factory reset
+  pinMode(_ONBOARD_LED, OUTPUT); //onboard led
+  led_off();
 
   Serial.begin(115200); Serial.println();
   Serial.print(_PRODUCT);
@@ -662,6 +510,7 @@ void setup()
   server.on("/data", get_data);
   server.on("/scan", scan_data);
   server.on("/gpio", html_gpio);
+  server.on("/reboot", handle_reboot);
   server.on("/", html_root);
   server.on("/favicon.svg", html_favicon);
   server.begin();
@@ -702,7 +551,7 @@ void loop() {
       reset_hold = millis();
     Serial.println(F("!"));
     if (millis() - reset_hold >= 10000) {
-      digitalWrite(_PIN_LED, LOW);
+      led_on();
       delay(1000);
       handle_deleteconfig();
     }
@@ -727,9 +576,9 @@ void loop() {
 
   //handle blinking frequency
   if (millis() - blink_millis >= led_delay) {
-    digitalWrite(_PIN_LED, LOW);
-    delay(1);
-    digitalWrite(_PIN_LED, HIGH);
+    led_on();
+    delay(2);
+    led_off();
     blink_millis = millis();
   }
 
@@ -819,6 +668,11 @@ void loop() {
     }
     if (c == '\r') {
       Serial.println();
+      if (code == "?") {
+        Serial.println(F("Chupa shell help."));
+        Serial.println(F("w\t- Wifi scan"));
+        Serial.println(F("reset\t- Factory reset"));
+      }
       if (code == "w") {
         Serial.println(F("Scanning for wifi networks..."));
         int w = WiFi.scanNetworks();
@@ -829,12 +683,16 @@ void loop() {
           Serial.print(WiFi.SSID(i));
           Serial.print(F("\t\t ["));
           Serial.print(WiFi.RSSI(i));
-          Serial.println("dBi]");
+          Serial.print("dBi, ch:");
+          Serial.print(WiFi.channel(i));
+          Serial.print(", ");
+          Serial.print(WiFi.BSSIDstr(i));
+          Serial.println("]");
         }
       }
       if (code == "reset") {
         Serial.println(F("Reset command accepted. Please wait..."));
-        digitalWrite(_PIN_LED, LOW);
+        led_on();
         delay(1000);
         handle_deleteconfig();
       }
@@ -847,4 +705,3 @@ void loop() {
   watchdog_counter = 0;
   yield();
 }
-
