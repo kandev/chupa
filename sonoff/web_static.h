@@ -55,6 +55,15 @@ select {
   margin-left:2px;
   width: 156px;
 }
+textarea {
+  background-color: #000;
+  border: 1px solid #ffa600;
+  border-radius: 4px;
+  color: #fff;
+  margin:0;
+  margin-left:2px;
+  width: 156px;
+}
 input[type=submit] {
   background-color: #ffa600;
   border: 1px solid #000;
@@ -192,9 +201,14 @@ fieldset legend {
   </fieldset>
 
   <fieldset style="height:180px;">
+  <legend>RFid tags</legend>
+    <textarea name="rfids" id="rfids" rows="8" cols="19"></textarea><br>
+    123456789:X:M (X - pin, Master)
+  </fieldset>
+
+  <fieldset style="height:180px;">
   <legend>Daily schedule</legend>
   <label><span style="width:40px;margin-left:2px;">ON [HH:MM]</span><span style="width:40px;margin-left:32px;">OFF [HH:MM]</span><span style="width:40px;margin-left:26px;">Output</span></label><br>
-
   <input type="number" min="0" max="23" name="sched1_h_on" id="sched1_h_on" class="sched" style="margin-right:-2px;">
   <input type="number" min="0" max="59" name="sched1_m_on" id="sched1_m_on" class="sched" style="margin-left:-2px;">
   <input type="number" min="0" max="23" name="sched1_h_off" id="sched1_h_off" class="sched" style="margin-right:-2px;">
@@ -234,8 +248,8 @@ fieldset legend {
   <select name="sched5_pin" id="sched5_pin" class="sched">
   <option value="0">off</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option>
   </select>
-
   </fieldset>
+
   <fieldset style="height:180px;">
   <legend>Output Control</legend>
   <input type="button" class="gpio_off" name="pin1" id="pin1" value="Output 1" onclick="switch_pin(this.id);"><br>
@@ -243,6 +257,7 @@ fieldset legend {
   <input type="button" class="gpio_off" name="pin3" id="pin3" value="Output 3" onclick="switch_pin(this.id);"><br>
   <input type="button" class="gpio_off" name="pin4" id="pin4" value="Output 4" onclick="switch_pin(this.id);"><br>
   </fieldset>
+
   <fieldset style="border: solid 1px #11ff00; height:180px;">
     <legend>Status</legend>
     Version: <span class="data" id="version"></span><br>
@@ -308,6 +323,7 @@ fieldset legend {
         if (data.temperature!="") document.getElementById("temperature").textContent = data.temperature + String.fromCharCode(176) + 'C';
         if (data.humidity!="") document.getElementById("humidity").textContent = data.humidity + '%';
         if (data.mqtt_status!="") document.getElementById("mqtt_status").textContent = data.mqtt_status;
+        if (data.rfids!="") document.getElementById("rfids").textContent = data.rfids;
         var opts='';
         var array=[];
         for(var w in data.wifis){
@@ -548,6 +564,7 @@ void get_data() {
         \"sched5_m_on\":\"" + schedule[4].on_m + "\", \
         \"sched5_h_off\":\"" + schedule[4].off_h + "\", \
         \"sched5_m_off\":\"" + schedule[4].off_m + "\", \
+        \"rfids\":\"" + _RFIDS + "\", \
         \"temperature\":\"n/a\", \
         \"humidity\":\"n/a\", \
         \"mqtt_status\":\"" + String(mqtt_status) + "\" \
@@ -595,6 +612,7 @@ bool loadConfig() {
   const char* smtp_pass = json["smtp_password"];
   const char* smtp_from = json["smtp_from"];
   const char* smtp_to = json["smtp_to"];
+  const char* rfids = json["rfids"];
   schedule[0].on_h = json["s1_h_on"];
   schedule[0].on_m = json["s1_m_on"];
   schedule[0].off_h = json["s1_h_off"];
@@ -637,6 +655,7 @@ bool loadConfig() {
   _SMTP_PASS = smtp_pass;
   _SMTP_FROM = smtp_from;
   _SMTP_TO = smtp_to;
+  _RFIDS = rfids;
 
   if (_MQTT_SERVER.length() == 0) _MQTT_SERVER = "";
   if (_MQTT_USERNAME.length() == 0) _MQTT_USERNAME = "";
@@ -653,9 +672,140 @@ bool loadConfig() {
   if (_NTP_SERVER.length() == 0) _NTP_SERVER = "bg.pool.ntp.org";
   if (_TIMEZONE.length() == 0) _TIMEZONE = "2";
   if (_MQTT_SERVERPORT == 0) _MQTT_SERVERPORT = 1883;
+  if (_RFIDS.length() == 0) _RFIDS = "";
 
   Serial.print(F("SSID: "));
   Serial.println(_SSID);
   closeFS();
   return true;
+}
+
+void handle_configure() {
+  if ((!server.authenticate("admin", _ADMIN_PASS.c_str())) && (_CLIENT))
+    server.requestAuthentication();
+  bool newssid, newpass;
+  for (int i = 0; i < server.args(); i++) {
+    if (server.argName(i) == "ssid") {
+      (_SSID == server.arg(i)) ? (newssid = false) : (newssid = true);
+      _SSID = server.arg(i);
+    }
+    if (server.argName(i) == "password") {
+      (_PASS == server.arg(i)) ? (newpass = false) : (newpass = true);
+      _PASS = server.arg(i);
+    }
+    if (server.argName(i) == "hostname") _HOSTNAME = server.arg(i);
+    if (server.argName(i) == "mqtt_server") _MQTT_SERVER = server.arg(i);
+    if (server.argName(i) == "mqtt_serverport") _MQTT_SERVERPORT = server.arg(i).toInt();
+    if (server.argName(i) == "mqtt_username") _MQTT_USERNAME = server.arg(i);
+    if (server.argName(i) == "mqtt_key") _MQTT_KEY = server.arg(i);
+    if (server.argName(i) == "admin_password") _ADMIN_PASS = server.arg(i);
+    if (server.argName(i) == "timezone") _TIMEZONE = server.arg(i).toInt();
+    if (server.argName(i) == "ntp_server") _NTP_SERVER = server.arg(i);
+    if (server.argName(i) == "sched1_h_on") schedule[0].on_h = server.arg(i).toInt();
+    if (server.argName(i) == "sched1_m_on") schedule[0].on_m = server.arg(i).toInt();
+    if (server.argName(i) == "sched1_h_off") schedule[0].off_h = server.arg(i).toInt();
+    if (server.argName(i) == "sched1_m_off") schedule[0].off_m = server.arg(i).toInt();
+    if (server.argName(i) == "sched1_pin") schedule[0].pin = server.arg(i).toInt();
+    if (server.argName(i) == "sched2_h_on") schedule[1].on_h = server.arg(i).toInt();
+    if (server.argName(i) == "sched2_m_on") schedule[1].on_m = server.arg(i).toInt();
+    if (server.argName(i) == "sched2_h_off") schedule[1].off_h = server.arg(i).toInt();
+    if (server.argName(i) == "sched2_m_off") schedule[1].off_m = server.arg(i).toInt();
+    if (server.argName(i) == "sched2_pin") schedule[1].pin = server.arg(i).toInt();
+    if (server.argName(i) == "sched3_h_on") schedule[2].on_h = server.arg(i).toInt();
+    if (server.argName(i) == "sched3_m_on") schedule[2].on_m = server.arg(i).toInt();
+    if (server.argName(i) == "sched3_h_off") schedule[2].off_h = server.arg(i).toInt();
+    if (server.argName(i) == "sched3_m_off") schedule[2].off_m = server.arg(i).toInt();
+    if (server.argName(i) == "sched3_pin") schedule[2].pin = server.arg(i).toInt();
+    if (server.argName(i) == "sched4_h_on") schedule[3].on_h = server.arg(i).toInt();
+    if (server.argName(i) == "sched4_m_on") schedule[3].on_m = server.arg(i).toInt();
+    if (server.argName(i) == "sched4_h_off") schedule[3].off_h = server.arg(i).toInt();
+    if (server.argName(i) == "sched4_m_off") schedule[3].off_m = server.arg(i).toInt();
+    if (server.argName(i) == "sched4_pin") schedule[3].pin = server.arg(i).toInt();
+    if (server.argName(i) == "sched5_h_on") schedule[4].on_h = server.arg(i).toInt();
+    if (server.argName(i) == "sched5_m_on") schedule[4].on_m = server.arg(i).toInt();
+    if (server.argName(i) == "sched5_h_off") schedule[4].off_h = server.arg(i).toInt();
+    if (server.argName(i) == "sched5_m_off") schedule[4].off_m = server.arg(i).toInt();
+    if (server.argName(i) == "sched5_pin") schedule[4].pin = server.arg(i).toInt();
+    if (server.argName(i) == "smtp_server") _SMTP_SERVER = server.arg(i);
+    if (server.argName(i) == "smtp_serverport") _SMTP_PORT = server.arg(i);
+    if (server.argName(i) == "smtp_username") _SMTP_USER = server.arg(i);
+    if (server.argName(i) == "smtp_password") _SMTP_PASS = server.arg(i);
+    if (server.argName(i) == "smtp_from") _SMTP_FROM = server.arg(i);
+    if (server.argName(i) == "smtp_to") _SMTP_TO = server.arg(i);
+    if (server.argName(i) == "rfids") _RFIDS = server.arg(i);
+  }
+  StaticJsonBuffer<1000> jsonBuffer;
+  JsonObject& json = jsonBuffer.createObject();
+  json["ssid"] = _SSID;
+  json["pass"] = _PASS;
+  json["hostname"] = _HOSTNAME;
+  json["mqtt_server"] = _MQTT_SERVER;
+  json["mqtt_serverport"] = _MQTT_SERVERPORT;
+  json["mqtt_username"] = _MQTT_USERNAME;
+  json["mqtt_key"] = _MQTT_KEY;
+  json["admin_password"] = _ADMIN_PASS;
+  json["ntp_server"] = _NTP_SERVER;
+  json["timezone"] = _TIMEZONE;
+  json["s1_h_on"] = schedule[0].on_h;
+  json["s1_m_on"] = schedule[0].on_m;
+  json["s1_h_off"] = schedule[0].off_h;
+  json["s1_m_off"] = schedule[0].off_m;
+  json["s1_pin"] = schedule[0].pin;
+  json["s2_h_on"] = schedule[1].on_h;
+  json["s2_m_on"] = schedule[1].on_m;
+  json["s2_h_off"] = schedule[1].off_h;
+  json["s2_m_off"] = schedule[1].off_m;
+  json["s2_pin"] = schedule[1].pin;
+  json["s3_h_on"] = schedule[2].on_h;
+  json["s3_m_on"] = schedule[2].on_m;
+  json["s3_h_off"] = schedule[2].off_h;
+  json["s3_m_off"] = schedule[2].off_m;
+  json["s3_pin"] = schedule[2].pin;
+  json["s4_h_on"] = schedule[3].on_h;
+  json["s4_m_on"] = schedule[3].on_m;
+  json["s4_h_off"] = schedule[3].off_h;
+  json["s4_m_off"] = schedule[3].off_m;
+  json["s4_pin"] = schedule[3].pin;
+  json["s5_h_on"] = schedule[4].on_h;
+  json["s5_m_on"] = schedule[4].on_m;
+  json["s5_h_off"] = schedule[4].off_h;
+  json["s5_m_off"] = schedule[4].off_m;
+  json["s5_pin"] = schedule[4].pin;
+  json["smtp_server"] = _SMTP_SERVER;
+  json["smtp_port"] = _SMTP_PORT;
+  json["smtp_user"] = _SMTP_USER;
+  json["smtp_pass"] = _SMTP_PASS;
+  json["smtp_from"] = _SMTP_FROM;
+  json["smtp_to"] = _SMTP_TO;
+  json["rfids"] = _RFIDS;
+
+  openFS();
+  File configFile = SPIFFS.open(_CONFIG, "w");
+  int error = 0;
+  if (!configFile) {
+    Serial.println(F("[ERR] Configuration can't be saved for some reason."));
+    error = 1;
+  }
+  json.printTo(configFile);
+  closeFS();
+  if (error == 0) {
+    server.send(200, F("text/html"), F("<meta http-equiv=\"refresh\" content=\"5; url=/\" />[OK]"));
+  } else {
+    server.send(200, F("text/plain"), F("[ERR]"));
+  }
+  if ((newssid) && (newpass)) ESP.restart();
+}
+
+void handle_showconfig() {
+  if (!server.authenticate("admin", _ADMIN_PASS.c_str()))
+    server.requestAuthentication();
+  openFS();
+  if (SPIFFS.exists(_CONFIG)) {
+    File file = SPIFFS.open(_CONFIG, "r");
+    size_t sent = server.streamFile(file, F("text/plain"));
+    file.close();
+  } else {
+    server.send(200, F("text/plain"), F("Config file not found."));
+  }
+  closeFS();
 }
