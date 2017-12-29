@@ -35,6 +35,7 @@ String _SMTP_USER;
 String _SMTP_PASS;
 String _SMTP_FROM;
 String _SMTP_TO;
+String _RFIDS;
 struct sched {
   byte on_h;
   byte on_m;
@@ -82,6 +83,7 @@ String mqtt_status;
 WiFiEventHandler wifiConnectHandler;
 WiFiEventHandler wifiDisconnectHandler;
 #include "web_static.h"
+
 
 void watchdog() {
   watchdog_counter++;
@@ -210,134 +212,6 @@ void html_gpio() {
         \"pin3\":\"" + digitalRead(_PIN3) + "\", \
         \"pin4\":\"" + digitalRead(_PIN4) + "\" \
                 }" );
-}
-
-void handle_configure() {
-  if ((!server.authenticate("admin", _ADMIN_PASS.c_str())) && (_CLIENT))
-    server.requestAuthentication();
-  bool newssid, newpass;
-  for (int i = 0; i < server.args(); i++) {
-    if (server.argName(i) == "ssid") {
-      (_SSID == server.arg(i)) ? (newssid = false) : (newssid = true);
-      _SSID = server.arg(i);
-    }
-    if (server.argName(i) == "password") {
-      (_PASS == server.arg(i)) ? (newpass = false) : (newpass = true);
-      _PASS = server.arg(i);
-    }
-    if (server.argName(i) == "hostname") _HOSTNAME = server.arg(i);
-    if (server.argName(i) == "mqtt_server") _MQTT_SERVER = server.arg(i);
-    if (server.argName(i) == "mqtt_serverport") _MQTT_SERVERPORT = server.arg(i).toInt();
-    if (server.argName(i) == "mqtt_username") _MQTT_USERNAME = server.arg(i);
-    if (server.argName(i) == "mqtt_key") _MQTT_KEY = server.arg(i);
-    if (server.argName(i) == "admin_password") _ADMIN_PASS = server.arg(i);
-    if (server.argName(i) == "timezone") _TIMEZONE = server.arg(i).toInt();
-    if (server.argName(i) == "ntp_server") _NTP_SERVER = server.arg(i);
-    if (server.argName(i) == "sched1_h_on") schedule[0].on_h = server.arg(i).toInt();
-    if (server.argName(i) == "sched1_m_on") schedule[0].on_m = server.arg(i).toInt();
-    if (server.argName(i) == "sched1_h_off") schedule[0].off_h = server.arg(i).toInt();
-    if (server.argName(i) == "sched1_m_off") schedule[0].off_m = server.arg(i).toInt();
-    if (server.argName(i) == "sched1_pin") schedule[0].pin = server.arg(i).toInt();
-    if (server.argName(i) == "sched2_h_on") schedule[1].on_h = server.arg(i).toInt();
-    if (server.argName(i) == "sched2_m_on") schedule[1].on_m = server.arg(i).toInt();
-    if (server.argName(i) == "sched2_h_off") schedule[1].off_h = server.arg(i).toInt();
-    if (server.argName(i) == "sched2_m_off") schedule[1].off_m = server.arg(i).toInt();
-    if (server.argName(i) == "sched2_pin") schedule[1].pin = server.arg(i).toInt();
-    if (server.argName(i) == "sched3_h_on") schedule[2].on_h = server.arg(i).toInt();
-    if (server.argName(i) == "sched3_m_on") schedule[2].on_m = server.arg(i).toInt();
-    if (server.argName(i) == "sched3_h_off") schedule[2].off_h = server.arg(i).toInt();
-    if (server.argName(i) == "sched3_m_off") schedule[2].off_m = server.arg(i).toInt();
-    if (server.argName(i) == "sched3_pin") schedule[2].pin = server.arg(i).toInt();
-    if (server.argName(i) == "sched4_h_on") schedule[3].on_h = server.arg(i).toInt();
-    if (server.argName(i) == "sched4_m_on") schedule[3].on_m = server.arg(i).toInt();
-    if (server.argName(i) == "sched4_h_off") schedule[3].off_h = server.arg(i).toInt();
-    if (server.argName(i) == "sched4_m_off") schedule[3].off_m = server.arg(i).toInt();
-    if (server.argName(i) == "sched4_pin") schedule[3].pin = server.arg(i).toInt();
-    if (server.argName(i) == "sched5_h_on") schedule[4].on_h = server.arg(i).toInt();
-    if (server.argName(i) == "sched5_m_on") schedule[4].on_m = server.arg(i).toInt();
-    if (server.argName(i) == "sched5_h_off") schedule[4].off_h = server.arg(i).toInt();
-    if (server.argName(i) == "sched5_m_off") schedule[4].off_m = server.arg(i).toInt();
-    if (server.argName(i) == "sched5_pin") schedule[4].pin = server.arg(i).toInt();
-    if (server.argName(i) == "smtp_server") _SMTP_SERVER = server.arg(i);
-    if (server.argName(i) == "smtp_serverport") _SMTP_PORT = server.arg(i);
-    if (server.argName(i) == "smtp_username") _SMTP_USER = server.arg(i);
-    if (server.argName(i) == "smtp_password") _SMTP_PASS = server.arg(i);
-    if (server.argName(i) == "smtp_from") _SMTP_FROM = server.arg(i);
-    if (server.argName(i) == "smtp_to") _SMTP_TO = server.arg(i);
-  }
-  StaticJsonBuffer<1000> jsonBuffer;
-  JsonObject& json = jsonBuffer.createObject();
-  json["ssid"] = _SSID;
-  json["pass"] = _PASS;
-  json["hostname"] = _HOSTNAME;
-  json["mqtt_server"] = _MQTT_SERVER;
-  json["mqtt_serverport"] = _MQTT_SERVERPORT;
-  json["mqtt_username"] = _MQTT_USERNAME;
-  json["mqtt_key"] = _MQTT_KEY;
-  json["admin_password"] = _ADMIN_PASS;
-  json["ntp_server"] = _NTP_SERVER;
-  json["timezone"] = _TIMEZONE;
-  json["s1_h_on"] = schedule[0].on_h;
-  json["s1_m_on"] = schedule[0].on_m;
-  json["s1_h_off"] = schedule[0].off_h;
-  json["s1_m_off"] = schedule[0].off_m;
-  json["s1_pin"] = schedule[0].pin;
-  json["s2_h_on"] = schedule[1].on_h;
-  json["s2_m_on"] = schedule[1].on_m;
-  json["s2_h_off"] = schedule[1].off_h;
-  json["s2_m_off"] = schedule[1].off_m;
-  json["s2_pin"] = schedule[1].pin;
-  json["s3_h_on"] = schedule[2].on_h;
-  json["s3_m_on"] = schedule[2].on_m;
-  json["s3_h_off"] = schedule[2].off_h;
-  json["s3_m_off"] = schedule[2].off_m;
-  json["s3_pin"] = schedule[2].pin;
-  json["s4_h_on"] = schedule[3].on_h;
-  json["s4_m_on"] = schedule[3].on_m;
-  json["s4_h_off"] = schedule[3].off_h;
-  json["s4_m_off"] = schedule[3].off_m;
-  json["s4_pin"] = schedule[3].pin;
-  json["s5_h_on"] = schedule[4].on_h;
-  json["s5_m_on"] = schedule[4].on_m;
-  json["s5_h_off"] = schedule[4].off_h;
-  json["s5_m_off"] = schedule[4].off_m;
-  json["s5_pin"] = schedule[4].pin;
-  json["smtp_server"] = _SMTP_SERVER;
-  json["smtp_port"] = _SMTP_PORT;
-  json["smtp_user"] = _SMTP_USER;
-  json["smtp_pass"] = _SMTP_PASS;
-  json["smtp_from"] = _SMTP_FROM;
-  json["smtp_to"] = _SMTP_TO;
-
-  openFS();
-  File configFile = SPIFFS.open(_CONFIG, "w");
-  int error = 0;
-  if (!configFile) {
-    Serial.println(F("[ERR] Configuration can't be saved for some reason."));
-    error = 1;
-  }
-  json.printTo(configFile);
-  closeFS();
-  if (error == 0) {
-    server.send(200, F("text/html"), F("<meta http-equiv=\"refresh\" content=\"5; url=/\" />[OK]"));
-  } else {
-    server.send(200, F("text/plain"), F("[ERR]"));
-  }
-  if ((newssid) && (newpass)) ESP.restart();
-}
-
-void handle_showconfig() {
-  if (!server.authenticate("admin", _ADMIN_PASS.c_str()))
-    server.requestAuthentication();
-  openFS();
-  if (SPIFFS.exists(_CONFIG)) {
-    File file = SPIFFS.open(_CONFIG, "r");
-    size_t sent = server.streamFile(file, F("text/plain"));
-    file.close();
-  } else {
-    server.send(200, F("text/plain"), F("Config file not found."));
-  }
-  closeFS();
 }
 
 void handle_deleteconfig() {
@@ -539,8 +413,13 @@ void setup()
       Serial.println(F("[ERR] NTP not initialized."));
     NTP.setInterval(3600);  //ntp sync once per hour
   }
+  Serial.println("RFIDs:");
+ // char * pch;
+  //while (pch != NULL) {
+//    pch=strtok_r(_RFIDS,'\n');
+  //  Serial.println(pch);
+  //}
 }
-
 
 void loop() {
   server.handleClient();
