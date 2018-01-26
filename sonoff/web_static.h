@@ -184,22 +184,6 @@ fieldset legend {
     <input type="text" name="mqtt_key" id="mqtt_key" value=""></td></tr>
   </fieldset>
 
-  <fieldset style="height:260px;">
-  <legend>SMTP</legend>
-    <label for="smtp_server">Server:</label><br>
-    <input type="text" name="smtp_server" id="smtp_server" value=""><br>
-    <label for="smtp_serverport">Port:</label><br>
-    <input type="text" name="smtp_serverport" id="smtp_serverport" value=""><br>
-    <label for="smtp_username">Username:</label><br>
-    <input type="text" name="smtp_username" id="smtp_username" value=""><br>
-    <label for="smtp_password">Password:</label><br>
-    <input type="text" name="smtp_password" id="smtp_password" value=""><br>
-    <label for="smtp_from">Mail From:</label><br>
-    <input type="text" name="smtp_from" id="smtp_from" value=""><br>
-    <label for="smtp_to">Mail To:</label><br>
-    <input type="text" name="smtp_to" id="smtp_to" value=""></td></tr>
-  </fieldset>
-
   <fieldset style="height:180px;">
   <legend>RFid tags</legend>
     <textarea name="rfids" id="rfids" rows="8" cols="19"></textarea><br>
@@ -302,13 +286,6 @@ fieldset legend {
         if (data.mqtt_serverport!="") document.getElementById("mqtt_serverport").value = data.mqtt_serverport;
         if (data.mqtt_username!="") document.getElementById("mqtt_username").value = data.mqtt_username;
         if (data.mqtt_key!="") document.getElementById("mqtt_key").value = data.mqtt_key;
-
-        if (data.smtp_server!="") document.getElementById("smtp_server").value = data.smtp_server;
-        if (data.smtp_serverport!="") document.getElementById("smtp_serverport").value = data.smtp_serverport;
-        if (data.smtp_username!="") document.getElementById("smtp_username").value = data.smtp_username;
-        if (data.smtp_password!="") document.getElementById("smtp_password").value = data.smtp_password;
-        if (data.smtp_from!="") document.getElementById("smtp_from").value = data.smtp_from;
-        if (data.smtp_to!="") document.getElementById("smtp_to").value = data.smtp_to;
 
         if (data.version!="") document.getElementById("version").textContent = data.version;
         if (data.mac!="") document.getElementById("mac").textContent = data.mac;
@@ -522,12 +499,6 @@ void get_data() {
         \"mqtt_serverport\":\"" + _MQTT_SERVERPORT + "\", \
         \"mqtt_username\":\"" + _MQTT_USERNAME + "\", \
         \"mqtt_key\":\"" + _MQTT_KEY + "\", \
-        \"smtp_server\":\"" + _SMTP_SERVER + "\", \
-        \"smtp_serverport\":\"" + _SMTP_PORT + "\", \
-        \"smtp_username\":\"" + _SMTP_USER + "\", \
-        \"smtp_password\":\"" + _SMTP_PASS + "\", \
-        \"smtp_from\":\"" + _SMTP_FROM + "\", \
-        \"smtp_to\":\"" + _SMTP_TO + "\", \
         \"admin_password\":\"" + _ADMIN_PASS + "\", \
         \"version\":\"" + String(_VERSION) + "\", \
         \"rssi\":\"" + String(WiFi.RSSI()) + "\", \
@@ -606,12 +577,6 @@ bool loadConfig() {
   const char* admin_pass = json["admin_password"];
   const char* ntp_server = json["ntp_server"];
   const char* timezone = json["timezone"];
-  const char* smtp_server = json["smtp_server"];
-  const char* smtp_port = json["smtp_serverport"];
-  const char* smtp_user = json["smtp_username"];
-  const char* smtp_pass = json["smtp_password"];
-  const char* smtp_from = json["smtp_from"];
-  const char* smtp_to = json["smtp_to"];
   const char* rfids = json["rfids"];
   schedule[0].on_h = json["s1_h_on"];
   schedule[0].on_m = json["s1_m_on"];
@@ -649,12 +614,6 @@ bool loadConfig() {
   _ADMIN_PASS = admin_pass;
   _NTP_SERVER = ntp_server;
   _TIMEZONE = timezone;
-  _SMTP_SERVER = smtp_server;
-  _SMTP_PORT = smtp_port;
-  _SMTP_USER = smtp_user;
-  _SMTP_PASS = smtp_pass;
-  _SMTP_FROM = smtp_from;
-  _SMTP_TO = smtp_to;
   _RFIDS = rfids;
 
   if (_MQTT_SERVER.length() == 0) _MQTT_SERVER = "";
@@ -663,12 +622,6 @@ bool loadConfig() {
   if (_ADMIN_PASS.length() == 0) _ADMIN_PASS = "";
   if (_SSID.length() == 0) _SSID = "";
   if (_PASS.length() == 0) _PASS = "";
-  if (_SMTP_SERVER.length() == 0) _SMTP_SERVER = "";
-  if (_SMTP_PORT.length() == 0) _SMTP_PORT = "";
-  if (_SMTP_USER.length() == 0) _SMTP_USER = "";
-  if (_SMTP_PASS.length() == 0) _SMTP_PASS = "";
-  if (_SMTP_FROM.length() == 0) _SMTP_FROM = "";
-  if (_SMTP_TO.length() == 0) _SMTP_TO = "";
   if (_NTP_SERVER.length() == 0) _NTP_SERVER = "bg.pool.ntp.org";
   if (_TIMEZONE.length() == 0) _TIMEZONE = "2";
   if (_MQTT_SERVERPORT == 0) _MQTT_SERVERPORT = 1883;
@@ -726,12 +679,6 @@ void handle_configure() {
     if (server.argName(i) == "sched5_h_off") schedule[4].off_h = server.arg(i).toInt();
     if (server.argName(i) == "sched5_m_off") schedule[4].off_m = server.arg(i).toInt();
     if (server.argName(i) == "sched5_pin") schedule[4].pin = server.arg(i).toInt();
-    if (server.argName(i) == "smtp_server") _SMTP_SERVER = server.arg(i);
-    if (server.argName(i) == "smtp_serverport") _SMTP_PORT = server.arg(i);
-    if (server.argName(i) == "smtp_username") _SMTP_USER = server.arg(i);
-    if (server.argName(i) == "smtp_password") _SMTP_PASS = server.arg(i);
-    if (server.argName(i) == "smtp_from") _SMTP_FROM = server.arg(i);
-    if (server.argName(i) == "smtp_to") _SMTP_TO = server.arg(i);
     if (server.argName(i) == "rfids") _RFIDS = server.arg(i);
   }
   StaticJsonBuffer<1000> jsonBuffer;
@@ -771,12 +718,6 @@ void handle_configure() {
   json["s5_h_off"] = schedule[4].off_h;
   json["s5_m_off"] = schedule[4].off_m;
   json["s5_pin"] = schedule[4].pin;
-  json["smtp_server"] = _SMTP_SERVER;
-  json["smtp_port"] = _SMTP_PORT;
-  json["smtp_user"] = _SMTP_USER;
-  json["smtp_pass"] = _SMTP_PASS;
-  json["smtp_from"] = _SMTP_FROM;
-  json["smtp_to"] = _SMTP_TO;
   json["rfids"] = _RFIDS;
 
   openFS();
