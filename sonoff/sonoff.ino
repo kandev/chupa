@@ -12,7 +12,7 @@
 ADC_MODE(ADC_VCC);  //read supply voltage by ESP.getVcc()
 
 //Main configuration
-const char* _VERSION = "0.183";
+const char* _VERSION = "0.184";
 const char* _PRODUCT = "Chupa";
 String _HOSTNAME = "";
 const char* _UPDATE_SERVER = "chupa.kandev.com";
@@ -36,6 +36,7 @@ String _SMTP_PASS;
 String _SMTP_FROM;
 String _SMTP_TO;
 String _RFIDS;
+bool _sched_enabled = false;
 struct sched {
   byte on_h;
   byte on_m;
@@ -94,13 +95,13 @@ void watchdog() {
 }
 
 void led_on() {
-    digitalWrite(_PIN_LED, LOW);
-    digitalWrite(_ONBOARD_LED, LOW);
+  digitalWrite(_PIN_LED, LOW);
+  digitalWrite(_ONBOARD_LED, LOW);
 }
 
 void led_off() {
-    digitalWrite(_PIN_LED, HIGH);
-    digitalWrite(_ONBOARD_LED, HIGH);
+  digitalWrite(_PIN_LED, HIGH);
+  digitalWrite(_ONBOARD_LED, HIGH);
 }
 
 String getMacAddress() {
@@ -226,6 +227,8 @@ void handle_deleteconfig() {
 }
 
 void handle_reboot() {
+  if (!server.authenticate("admin", _ADMIN_PASS.c_str()))
+    server.requestAuthentication();
   Serial.println(F("Restarting..."));
   server.send(200, F("text/html"), F("<meta http-equiv=\"refresh\" content=\"5; url=/\" />[OK] Restarting..."));
   ESP.restart();
@@ -254,15 +257,15 @@ void checkforupdate() {
 }
 
 void connectToMqtt() {
-    IPAddress mqttIP;
-    if (WiFi.isConnected()) {
-      Serial.println("Connecting to MQTT...");
-      WiFi.hostByName(_MQTT_SERVER.c_str(), mqttIP);
-      Serial.println(String("Connecting to MQTT broker " + _MQTT_SERVER + ", resolved to " + mqttIP.toString()));
-      mqttClient.setServer(mqttIP, _MQTT_SERVERPORT);
-      mqttReconnectTimer.detach();
-      mqttClient.connect();
-    }
+  IPAddress mqttIP;
+  if (WiFi.isConnected()) {
+    Serial.println("Connecting to MQTT...");
+    WiFi.hostByName(_MQTT_SERVER.c_str(), mqttIP);
+    Serial.println(String("Connecting to MQTT broker " + _MQTT_SERVER + ", resolved to " + mqttIP.toString()));
+    mqttClient.setServer(mqttIP, _MQTT_SERVERPORT);
+    mqttReconnectTimer.detach();
+    mqttClient.connect();
+  }
 }
 void onMqttConnect(bool sessionPresent) {
   String subs = _HOSTNAME + "/set/#";
@@ -270,7 +273,7 @@ void onMqttConnect(bool sessionPresent) {
   Serial.print(String("Subscribing to: [" + subs + "]... "));
 }
 void onMqttDisconnect(AsyncMqttClientDisconnectReason reason) {
-      mqttReconnectTimer.attach(5, connectToMqtt);
+  mqttReconnectTimer.attach(5, connectToMqtt);
 }
 void onMqttSubscribe(uint16_t packetId, uint8_t qos) {
   Serial.println(F("[OK] MQTT subscription done!"));
@@ -316,6 +319,7 @@ void wifi_connect() {
     IPAddress myIP = WiFi.softAPIP();
     Serial.print(F("To configure the device, please connect to the wifi network and open http://"));
     Serial.println(myIP.toString().c_str());
+    _sched_enabled=true;
   } else {
     wifiReconnectTimer.detach();
     led_delay = 5000;  //if client - blink once every 5 seconds
@@ -347,6 +351,7 @@ void wifi_connect() {
 
 void onWifiConnect(const WiFiEventStationModeGotIP& event) {
   Serial.println("Connected to Wi-Fi.");
+  _sched_enabled = true;
   if (_MQTT_SERVER.length() > 0)
     mqttReconnectTimer.attach(5, connectToMqtt);
 }
@@ -355,6 +360,7 @@ void onWifiDisconnect(const WiFiEventStationModeDisconnected& event) {
   Serial.println("Disconnected from Wi-Fi.");
   mqttReconnectTimer.detach(); // ensure we don't reconnect to MQTT while reconnecting to Wi-Fi
   wifiReconnectTimer.attach(5, wifi_connect);
+  _sched_enabled = false;
 }
 
 void setup()
@@ -414,9 +420,9 @@ void setup()
     NTP.setInterval(3600);  //ntp sync once per hour
   }
   Serial.println("RFIDs:");
- // char * pch;
+  // char * pch;
   //while (pch != NULL) {
-//    pch=strtok_r(_RFIDS,'\n');
+  //    pch=strtok_r(_RFIDS,'\n');
   //  Serial.println(pch);
   //}
 }
@@ -480,35 +486,37 @@ void loop() {
   }
 
   //scheduler
-  for (byte q = 0; q < 5; q++) {
-    if (schedule[q].pin != 0) {
-      unsigned int on_time = (schedule[q].on_h * 60) + schedule[q].on_m;
-      unsigned int off_time = (schedule[q].off_h * 60) + schedule[q].off_m;
-      unsigned int time_now = (hour() * 60) + minute();
-      if (on_time < off_time) {
-        if ((time_now >= on_time) && (time_now < off_time)) {
-          if (schedule[q].pin == 1) switchpin(_PIN1, 1);
-          if (schedule[q].pin == 2) switchpin(_PIN2, 1);
-          if (schedule[q].pin == 3) switchpin(_PIN3, 1);
-          if (schedule[q].pin == 4) switchpin(_PIN4, 1);
-        } else {
-          if (schedule[q].pin == 1) switchpin(_PIN1, 0);
-          if (schedule[q].pin == 2) switchpin(_PIN2, 0);
-          if (schedule[q].pin == 3) switchpin(_PIN3, 0);
-          if (schedule[q].pin == 4) switchpin(_PIN4, 0);
+  if (_sched_enabled) {
+    for (byte q = 0; q < 5; q++) {
+      if (schedule[q].pin != 0) {
+        unsigned int on_time = (schedule[q].on_h * 60) + schedule[q].on_m;
+        unsigned int off_time = (schedule[q].off_h * 60) + schedule[q].off_m;
+        unsigned int time_now = (hour() * 60) + minute();
+        if (on_time < off_time) {
+          if ((time_now >= on_time) && (time_now < off_time)) {
+            if (schedule[q].pin == 1) switchpin(_PIN1, 1);
+            if (schedule[q].pin == 2) switchpin(_PIN2, 1);
+            if (schedule[q].pin == 3) switchpin(_PIN3, 1);
+            if (schedule[q].pin == 4) switchpin(_PIN4, 1);
+          } else {
+            if (schedule[q].pin == 1) switchpin(_PIN1, 0);
+            if (schedule[q].pin == 2) switchpin(_PIN2, 0);
+            if (schedule[q].pin == 3) switchpin(_PIN3, 0);
+            if (schedule[q].pin == 4) switchpin(_PIN4, 0);
+          }
         }
-      }
-      if (on_time > off_time) {
-        if ((time_now >= off_time) && (time_now < on_time)) {
-          if (schedule[q].pin == 1) switchpin(_PIN1, 0);
-          if (schedule[q].pin == 2) switchpin(_PIN2, 0);
-          if (schedule[q].pin == 3) switchpin(_PIN3, 0);
-          if (schedule[q].pin == 4) switchpin(_PIN4, 0);
-        } else {
-          if (schedule[q].pin == 1) switchpin(_PIN1, 1);
-          if (schedule[q].pin == 2) switchpin(_PIN2, 1);
-          if (schedule[q].pin == 3) switchpin(_PIN3, 1);
-          if (schedule[q].pin == 4) switchpin(_PIN4, 1);
+        if (on_time > off_time) {
+          if ((time_now >= off_time) && (time_now < on_time)) {
+            if (schedule[q].pin == 1) switchpin(_PIN1, 0);
+            if (schedule[q].pin == 2) switchpin(_PIN2, 0);
+            if (schedule[q].pin == 3) switchpin(_PIN3, 0);
+            if (schedule[q].pin == 4) switchpin(_PIN4, 0);
+          } else {
+            if (schedule[q].pin == 1) switchpin(_PIN1, 1);
+            if (schedule[q].pin == 2) switchpin(_PIN2, 1);
+            if (schedule[q].pin == 3) switchpin(_PIN3, 1);
+            if (schedule[q].pin == 4) switchpin(_PIN4, 1);
+          }
         }
       }
     }
