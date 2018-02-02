@@ -20,7 +20,7 @@ ADC_MODE(ADC_VCC);  //read supply voltage by ESP.getVcc()
 #define _PIN1 12
 #define _PIN2 14
 #define _PIN_RESET 0
-#define _VERSION "0.189"
+#define _VERSION "0.190"
 #define _PRODUCT "Chupa"
 #define _UPDATE_SERVER "chupa.kandev.com"
 #define _UPDATE_PORT 80
@@ -38,15 +38,10 @@ ADC_MODE(ADC_VCC);  //read supply voltage by ESP.getVcc()
 String _HOSTNAME = "";
 String _RFIDS;
 struct sched {
-  byte on_h;
-  byte on_m;
-  byte off_h;
-  byte off_m;
-  unsigned int on;
-  unsigned int off;
-  byte pin;
+  unsigned int time_on = 0;
+  unsigned int time_off = 0;
 };
-sched schedule[5];
+sched schedule[2];
 String _MQTT_SERVER;
 unsigned int _MQTT_SERVERPORT;
 String _MQTT_USERNAME;
