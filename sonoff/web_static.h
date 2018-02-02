@@ -198,7 +198,7 @@ fieldset legend {
   <input type="number" min="0" max="23" name="sched1_h_off" id="sched1_h_off" class="sched" style="margin-right:-2px;">
   <input type="number" min="0" max="59" name="sched1_m_off" id="sched1_m_off" class="sched" style="margin-left:-2px;">
   <select name="sched1_pin" id="sched1_pin" class="sched">
-  <option value="0">off</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option>
+  <option value="0">off</option><option value="1">1</option><option value="2">2</option>
   </select>
 <br>
   <input type="number" min="0" max="23" name="sched2_h_on" id="sched2_h_on" class="sched" style="margin-right:-2px;">
@@ -206,7 +206,7 @@ fieldset legend {
   <input type="number" min="0" max="23" name="sched2_h_off" id="sched2_h_off" class="sched" style="margin-right:-2px;">
   <input type="number" min="0" max="59" name="sched2_m_off" id="sched2_m_off" class="sched" style="margin-left:-2px;">
   <select name="sched2_pin" id="sched2_pin" class="sched">
-  <option value="0">off</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option>
+  <option value="0">off</option><option value="1">1</option><option value="2">2</option>
   </select>
 <br>
   <input type="number" min="0" max="23" name="sched3_h_on" id="sched3_h_on" class="sched" style="margin-right:-2px;">
@@ -214,7 +214,7 @@ fieldset legend {
   <input type="number" min="0" max="23" name="sched3_h_off" id="sched3_h_off" class="sched" style="margin-right:-2px;">
   <input type="number" min="0" max="59" name="sched3_m_off" id="sched3_m_off" class="sched" style="margin-left:-2px;">
   <select name="sched3_pin" id="sched3_pin" class="sched">
-  <option value="0">off</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option>
+  <option value="0">off</option><option value="1">1</option><option value="2">2</option>
   </select>
 <br>
   <input type="number" min="0" max="23"  name="sched4_h_on" id="sched4_h_on" class="sched" style="margin-right:-2px;">
@@ -222,7 +222,7 @@ fieldset legend {
   <input type="number" min="0" max="23" name="sched4_h_off" id="sched4_h_off" class="sched" style="margin-right:-2px;">
   <input type="number" min="0" max="59" name="sched4_m_off" id="sched4_m_off" class="sched" style="margin-left:-2px;">
   <select name="sched4_pin" id="sched4_pin" class="sched">
-  <option value="0">off</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option>
+  <option value="0">off</option><option value="1">1</option><option value="2">2</option>
   </select>
 <br>
   <input type="number" min="0" max="23" name="sched5_h_on" id="sched5_h_on" class="sched" style="margin-right:-2px;">
@@ -230,7 +230,7 @@ fieldset legend {
   <input type="number" min="0" max="23" name="sched5_h_off" id="sched5_h_off" class="sched" style="margin-right:-2px;">
   <input type="number" min="0" max="59" name="sched5_m_off" id="sched5_m_off" class="sched" style="margin-left:-2px;">
   <select name="sched5_pin" id="sched5_pin" class="sched">
-  <option value="0">off</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option>
+  <option value="0">off</option><option value="1">1</option><option value="2">2</option>
   </select>
   </fieldset>
 
@@ -238,8 +238,6 @@ fieldset legend {
   <legend>Output Control</legend>
   <input type="button" class="gpio_off" name="pin1" id="pin1" value="Output 1" onclick="switch_pin(this.id);"><br>
   <input type="button" class="gpio_off" name="pin2" id="pin2" value="Output 2" onclick="switch_pin(this.id);"><br>
-  <input type="button" class="gpio_off" name="pin3" id="pin3" value="Output 3" onclick="switch_pin(this.id);"><br>
-  <input type="button" class="gpio_off" name="pin4" id="pin4" value="Output 4" onclick="switch_pin(this.id);"><br>
   </fieldset>
 
   <fieldset style="border: solid 1px #11ff00; height:180px;">
@@ -328,14 +326,6 @@ fieldset legend {
           document.getElementById("pin2").className = "gpio_on";
         else
           document.getElementById("pin2").className = "gpio_off";
-        if (data.pin3=="1")
-          document.getElementById("pin3").className = "gpio_on";
-        else
-          document.getElementById("pin3").className = "gpio_off";
-        if (data.pin4=="1")
-          document.getElementById("pin4").className = "gpio_on";
-        else
-          document.getElementById("pin4").className = "gpio_off";
         if (data.sched1_h_on!="") document.getElementById("sched1_h_on").value = data.sched1_h_on;
         if (data.sched1_m_on!="") document.getElementById("sched1_m_on").value = data.sched1_m_on;
         if (data.sched1_h_off!="") document.getElementById("sched1_h_off").value = data.sched1_h_off;
@@ -389,14 +379,6 @@ fieldset legend {
           document.getElementById("pin2").className = "gpio_on";
         else
           document.getElementById("pin2").className = "gpio_off";
-        if (data.pin3=="1")
-          document.getElementById("pin3").className = "gpio_on";
-        else
-          document.getElementById("pin3").className = "gpio_off";
-        if (data.pin4=="1")
-          document.getElementById("pin4").className = "gpio_on";
-        else
-          document.getElementById("pin4").className = "gpio_off";
       }
     };
     xhttp.open("GET", "/data", true);
@@ -457,14 +439,6 @@ fieldset legend {
           document.getElementById("pin2").className = "gpio_on";
         else
           document.getElementById("pin2").className = "gpio_off";
-        if (data.pin3=="1")
-          document.getElementById("pin3").className = "gpio_on";
-        else
-          document.getElementById("pin3").className = "gpio_off";
-        if (data.pin4=="1")
-          document.getElementById("pin4").className = "gpio_on";
-        else
-          document.getElementById("pin4").className = "gpio_off";
         if (data.time!="") 
           document.getElementById("time").textContent = data.time;
         document.getElementById(pin).style.backgroundColor="";
@@ -484,7 +458,6 @@ fieldset legend {
 void get_data() {
   if ((!server.authenticate("admin", _ADMIN_PASS.c_str())) && (_CLIENT))
     server.requestAuthentication();
-  if (_NTP_SERVER == "") _NTP_SERVER = "bg.pool.ntp.org";
   if (mqttClient.connected()) {
     mqtt_status="connected";
   } else {
@@ -508,8 +481,6 @@ void get_data() {
         \"vcc\":\"" + String(float(ESP.getVcc() / 1000.0)) + "\", \
         \"pin1\":\"" + digitalRead(_PIN1) + "\", \
         \"pin2\":\"" + digitalRead(_PIN2) + "\", \
-        \"pin3\":\"" + digitalRead(_PIN3) + "\", \
-        \"pin4\":\"" + digitalRead(_PIN4) + "\", \
         \"sched1_pin\":\"" + schedule[0].pin + "\", \
         \"sched1_h_on\":\"" + schedule[0].on_h + "\", \
         \"sched1_m_on\":\"" + schedule[0].on_m + "\", \
@@ -612,8 +583,8 @@ bool loadConfig() {
   _MQTT_USERNAME = mqtt_user;
   _MQTT_KEY = mqtt_key;
   _ADMIN_PASS = admin_pass;
-  _NTP_SERVER = ntp_server;
-  _TIMEZONE = timezone;
+//  _NTP_SERVER = ntp_server;
+//  _TIMEZONE = timezone;
   _RFIDS = rfids;
 
   if (_MQTT_SERVER.length() == 0) _MQTT_SERVER = "";
@@ -622,8 +593,8 @@ bool loadConfig() {
   if (_ADMIN_PASS.length() == 0) _ADMIN_PASS = "";
   if (_SSID.length() == 0) _SSID = "";
   if (_PASS.length() == 0) _PASS = "";
-  if (_NTP_SERVER.length() == 0) _NTP_SERVER = "bg.pool.ntp.org";
-  if (_TIMEZONE.length() == 0) _TIMEZONE = "2";
+//  if (_NTP_SERVER.length() == 0) _NTP_SERVER = "bg.pool.ntp.org";
+//  if (_TIMEZONE.length() == 0) _TIMEZONE = "2";
   if (_MQTT_SERVERPORT == 0) _MQTT_SERVERPORT = 1883;
   if (_RFIDS.length() == 0) _RFIDS = "";
 
@@ -652,8 +623,8 @@ void handle_configure() {
     if (server.argName(i) == "mqtt_username") _MQTT_USERNAME = server.arg(i);
     if (server.argName(i) == "mqtt_key") _MQTT_KEY = server.arg(i);
     if (server.argName(i) == "admin_password") _ADMIN_PASS = server.arg(i);
-    if (server.argName(i) == "timezone") _TIMEZONE = server.arg(i).toInt();
-    if (server.argName(i) == "ntp_server") _NTP_SERVER = server.arg(i);
+//    if (server.argName(i) == "timezone") _TIMEZONE = server.arg(i).toInt();
+//    if (server.argName(i) == "ntp_server") _NTP_SERVER = server.arg(i);
     if (server.argName(i) == "sched1_h_on") schedule[0].on_h = server.arg(i).toInt();
     if (server.argName(i) == "sched1_m_on") schedule[0].on_m = server.arg(i).toInt();
     if (server.argName(i) == "sched1_h_off") schedule[0].off_h = server.arg(i).toInt();
