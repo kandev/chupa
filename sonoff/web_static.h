@@ -197,41 +197,11 @@ fieldset legend {
   <input type="number" min="0" max="59" name="sched1_m_on" id="sched1_m_on" class="sched" style="margin-left:-2px;">
   <input type="number" min="0" max="23" name="sched1_h_off" id="sched1_h_off" class="sched" style="margin-right:-2px;">
   <input type="number" min="0" max="59" name="sched1_m_off" id="sched1_m_off" class="sched" style="margin-left:-2px;">
-  <select name="sched1_pin" id="sched1_pin" class="sched">
-  <option value="0">off</option><option value="1">1</option><option value="2">2</option>
-  </select>
 <br>
   <input type="number" min="0" max="23" name="sched2_h_on" id="sched2_h_on" class="sched" style="margin-right:-2px;">
   <input type="number" min="0" max="59" name="sched2_m_on" id="sched2_m_on" class="sched" style="margin-left:-2px;">
   <input type="number" min="0" max="23" name="sched2_h_off" id="sched2_h_off" class="sched" style="margin-right:-2px;">
   <input type="number" min="0" max="59" name="sched2_m_off" id="sched2_m_off" class="sched" style="margin-left:-2px;">
-  <select name="sched2_pin" id="sched2_pin" class="sched">
-  <option value="0">off</option><option value="1">1</option><option value="2">2</option>
-  </select>
-<br>
-  <input type="number" min="0" max="23" name="sched3_h_on" id="sched3_h_on" class="sched" style="margin-right:-2px;">
-  <input type="number" min="0" max="59" name="sched3_m_on" id="sched3_m_on" class="sched" style="margin-left:-2px;">
-  <input type="number" min="0" max="23" name="sched3_h_off" id="sched3_h_off" class="sched" style="margin-right:-2px;">
-  <input type="number" min="0" max="59" name="sched3_m_off" id="sched3_m_off" class="sched" style="margin-left:-2px;">
-  <select name="sched3_pin" id="sched3_pin" class="sched">
-  <option value="0">off</option><option value="1">1</option><option value="2">2</option>
-  </select>
-<br>
-  <input type="number" min="0" max="23"  name="sched4_h_on" id="sched4_h_on" class="sched" style="margin-right:-2px;">
-  <input type="number" min="0" max="59" name="sched4_m_on" id="sched4_m_on" class="sched" style="margin-left:-2px;">
-  <input type="number" min="0" max="23" name="sched4_h_off" id="sched4_h_off" class="sched" style="margin-right:-2px;">
-  <input type="number" min="0" max="59" name="sched4_m_off" id="sched4_m_off" class="sched" style="margin-left:-2px;">
-  <select name="sched4_pin" id="sched4_pin" class="sched">
-  <option value="0">off</option><option value="1">1</option><option value="2">2</option>
-  </select>
-<br>
-  <input type="number" min="0" max="23" name="sched5_h_on" id="sched5_h_on" class="sched" style="margin-right:-2px;">
-  <input type="number" min="0" max="59" name="sched5_m_on" id="sched5_m_on" class="sched" style="margin-left:-2px;">
-  <input type="number" min="0" max="23" name="sched5_h_off" id="sched5_h_off" class="sched" style="margin-right:-2px;">
-  <input type="number" min="0" max="59" name="sched5_m_off" id="sched5_m_off" class="sched" style="margin-left:-2px;">
-  <select name="sched5_pin" id="sched5_pin" class="sched">
-  <option value="0">off</option><option value="1">1</option><option value="2">2</option>
-  </select>
   </fieldset>
 
   <fieldset style="height:180px;">
@@ -284,7 +254,6 @@ fieldset legend {
         if (data.mqtt_serverport!="") document.getElementById("mqtt_serverport").value = data.mqtt_serverport;
         if (data.mqtt_username!="") document.getElementById("mqtt_username").value = data.mqtt_username;
         if (data.mqtt_key!="") document.getElementById("mqtt_key").value = data.mqtt_key;
-
         if (data.version!="") document.getElementById("version").textContent = data.version;
         if (data.mac!="") document.getElementById("mac").textContent = data.mac;
         if (data.rssi!="") document.getElementById("rssi").textContent = data.rssi + 'dBi';
@@ -326,36 +295,37 @@ fieldset legend {
           document.getElementById("pin2").className = "gpio_on";
         else
           document.getElementById("pin2").className = "gpio_off";
-        if (data.sched1_h_on!="") document.getElementById("sched1_h_on").value = data.sched1_h_on;
-        if (data.sched1_m_on!="") document.getElementById("sched1_m_on").value = data.sched1_m_on;
-        if (data.sched1_h_off!="") document.getElementById("sched1_h_off").value = data.sched1_h_off;
-        if (data.sched1_m_off!="") document.getElementById("sched1_m_off").value = data.sched1_m_off;
-        if (data.sched1_pin!="") document.getElementById("sched1_pin").value = data.sched1_pin;
+          
+        if (data.time_on_1!="") {
+          var minutes = Math.floor(data.time_on_1 / 60);
+          var h = Math.floor(minutes / 60);
+          var m = minutes - h * 60;
+          document.getElementById("sched1_h_on").value = h;
+          document.getElementById("sched1_m_on").value = m;
+        }
+        if (data.time_off_1!="") {
+          var minutes = Math.floor(data.time_off_1 / 60);
+          var h = Math.floor(minutes / 60);
+          var m = minutes - h * 60;
+          document.getElementById("sched1_h_off").value = h;
+          document.getElementById("sched1_m_off").value = m;
+        }
 
-        if (data.sched2_h_on!="") document.getElementById("sched2_h_on").value = data.sched2_h_on;
-        if (data.sched2_m_on!="") document.getElementById("sched2_m_on").value = data.sched2_m_on;
-        if (data.sched2_h_off!="") document.getElementById("sched2_h_off").value = data.sched2_h_off;
-        if (data.sched2_m_off!="") document.getElementById("sched2_m_off").value = data.sched2_m_off;
-        if (data.sched2_pin!="") document.getElementById("sched2_pin").value = data.sched2_pin;
-
-        if (data.sched3_h_on!="") document.getElementById("sched3_h_on").value = data.sched3_h_on;
-        if (data.sched3_m_on!="") document.getElementById("sched3_m_on").value = data.sched3_m_on;
-        if (data.sched3_h_off!="") document.getElementById("sched3_h_off").value = data.sched3_h_off;
-        if (data.sched3_m_off!="") document.getElementById("sched3_m_off").value = data.sched3_m_off;
-        if (data.sched3_pin!="") document.getElementById("sched3_pin").value = data.sched3_pin;
-
-        if (data.sched4_h_on!="") document.getElementById("sched4_h_on").value = data.sched4_h_on;
-        if (data.sched4_m_on!="") document.getElementById("sched4_m_on").value = data.sched4_m_on;
-        if (data.sched4_h_off!="") document.getElementById("sched4_h_off").value = data.sched4_h_off;
-        if (data.sched4_m_off!="") document.getElementById("sched4_m_off").value = data.sched4_m_off;
-        if (data.sched4_pin!="") document.getElementById("sched4_pin").value = data.sched4_pin;
-
-        if (data.sched5_h_on!="") document.getElementById("sched5_h_on").value = data.sched5_h_on;
-        if (data.sched5_m_on!="") document.getElementById("sched5_m_on").value = data.sched5_m_on;
-        if (data.sched5_h_off!="") document.getElementById("sched5_h_off").value = data.sched5_h_off;
-        if (data.sched5_m_off!="") document.getElementById("sched5_m_off").value = data.sched5_m_off;
-        if (data.sched5_pin!="") document.getElementById("sched5_pin").value = data.sched5_pin;
-      }
+        if (data.time_on_1!="") {
+          var minutes = Math.floor(data.time_on_2 / 60);
+          var h = Math.floor(minutes / 60);
+          var m = minutes - h * 60;
+          document.getElementById("sched2_h_on").value = h;
+          document.getElementById("sched2_m_on").value = m;
+        }
+        if (data.time_off_1!="") {
+          var minutes = Math.floor(data.time_off_2 / 60);
+          var h = Math.floor(minutes / 60);
+          var m = minutes - h * 60;
+          document.getElementById("sched2_h_off").value = h;
+          document.getElementById("sched2_m_off").value = m;
+        }
+}
     };
     xhttp.open("GET", "/data", true);
     xhttp.send();
@@ -459,11 +429,12 @@ void get_data() {
   if ((!server.authenticate("admin", _ADMIN_PASS.c_str())) && (_CLIENT))
     server.requestAuthentication();
   if (mqttClient.connected()) {
-    mqtt_status="connected";
+    mqtt_status = "connected";
   } else {
-    mqtt_status="disconnected";
+    mqtt_status = "disconnected";
   }
-  server.send ( 200, F("application/json"), "{ \"hostname\":\"" + String(_HOSTNAME) + "\", \
+  server.send ( 200, F("application/json"), "{ \
+        \"hostname\":\"" + String(_HOSTNAME) + "\", \
         \"ssid\":\"" + String(_SSID) + "\", \
         \"ntp_server\":\"" + _NTP_SERVER + "\", \
         \"timezone\":\"" + _TIMEZONE + "\", \
@@ -481,34 +452,13 @@ void get_data() {
         \"vcc\":\"" + String(float(ESP.getVcc() / 1000.0)) + "\", \
         \"pin1\":\"" + digitalRead(_PIN1) + "\", \
         \"pin2\":\"" + digitalRead(_PIN2) + "\", \
-        \"sched1_pin\":\"" + schedule[0].pin + "\", \
-        \"sched1_h_on\":\"" + schedule[0].on_h + "\", \
-        \"sched1_m_on\":\"" + schedule[0].on_m + "\", \
-        \"sched1_h_off\":\"" + schedule[0].off_h + "\", \
-        \"sched1_m_off\":\"" + schedule[0].off_m + "\", \
-        \"sched2_pin\":\"" + schedule[1].pin + "\", \
-        \"sched2_h_on\":\"" + schedule[1].on_h + "\", \
-        \"sched2_m_on\":\"" + schedule[1].on_m + "\", \
-        \"sched2_h_off\":\"" + schedule[1].off_h + "\", \
-        \"sched2_m_off\":\"" + schedule[1].off_m + "\", \
-        \"sched3_pin\":\"" + schedule[2].pin + "\", \
-        \"sched3_h_on\":\"" + schedule[2].on_h + "\", \
-        \"sched3_m_on\":\"" + schedule[2].on_m + "\", \
-        \"sched3_h_off\":\"" + schedule[2].off_h + "\", \
-        \"sched3_m_off\":\"" + schedule[2].off_m + "\", \
-        \"sched4_pin\":\"" + schedule[3].pin + "\", \
-        \"sched4_h_on\":\"" + schedule[3].on_h + "\", \
-        \"sched4_m_on\":\"" + schedule[3].on_m + "\", \
-        \"sched4_h_off\":\"" + schedule[3].off_h + "\", \
-        \"sched4_m_off\":\"" + schedule[3].off_m + "\", \
-        \"sched5_pin\":\"" + schedule[4].pin + "\", \
-        \"sched5_h_on\":\"" + schedule[4].on_h + "\", \
-        \"sched5_m_on\":\"" + schedule[4].on_m + "\", \
-        \"sched5_h_off\":\"" + schedule[4].off_h + "\", \
-        \"sched5_m_off\":\"" + schedule[4].off_m + "\", \
         \"rfids\":\"" + _RFIDS + "\", \
         \"temperature\":\"n/a\", \
         \"humidity\":\"n/a\", \
+        \"time_on_1\":\"" + schedule[0].time_on + "\", \
+        \"time_off_1\":\"" + schedule[0].time_off + "\", \
+        \"time_on_2\":\"" + schedule[1].time_on + "\", \
+        \"time_off_2\":\"" + schedule[1].time_off + "\", \
         \"mqtt_status\":\"" + String(mqtt_status) + "\" \
                 }" );
 }
@@ -549,31 +499,10 @@ bool loadConfig() {
   const char* ntp_server = json["ntp_server"];
   const char* timezone = json["timezone"];
   const char* rfids = json["rfids"];
-  schedule[0].on_h = json["s1_h_on"];
-  schedule[0].on_m = json["s1_m_on"];
-  schedule[0].off_h = json["s1_h_off"];
-  schedule[0].off_m = json["s1_m_off"];
-  schedule[0].pin = json["s1_pin"];
-  schedule[1].on_h = json["s2_h_on"];
-  schedule[1].on_m = json["s2_m_on"];
-  schedule[1].off_h = json["s2_h_off"];
-  schedule[1].off_m = json["s2_m_off"];
-  schedule[1].pin = json["s2_pin"];
-  schedule[2].on_h = json["s3_h_on"];
-  schedule[2].on_m = json["s3_m_on"];
-  schedule[2].off_h = json["s3_h_off"];
-  schedule[2].off_m = json["s3_m_off"];
-  schedule[2].pin = json["s3_pin"];
-  schedule[3].on_h = json["s4_h_on"];
-  schedule[3].on_m = json["s4_m_on"];
-  schedule[3].off_h = json["s4_h_off"];
-  schedule[3].off_m = json["s4_m_off"];
-  schedule[3].pin = json["s4_pin"];
-  schedule[4].on_h = json["s5_h_on"];
-  schedule[4].on_m = json["s5_m_on"];
-  schedule[4].off_h = json["s5_h_off"];
-  schedule[4].off_m = json["s5_m_off"];
-  schedule[4].pin = json["s5_pin"];
+  schedule[0].time_on = json["time_on_1"];
+  schedule[0].time_off = json["time_off_1"];
+  schedule[1].time_on = json["time_on_2"];
+  schedule[1].time_off = json["time_off_2"];
 
   if (String(hostname) != "")
     _HOSTNAME = hostname;
@@ -583,8 +512,8 @@ bool loadConfig() {
   _MQTT_USERNAME = mqtt_user;
   _MQTT_KEY = mqtt_key;
   _ADMIN_PASS = admin_pass;
-//  _NTP_SERVER = ntp_server;
-//  _TIMEZONE = timezone;
+  //  _NTP_SERVER = ntp_server;
+  //  _TIMEZONE = timezone;
   _RFIDS = rfids;
 
   if (_MQTT_SERVER.length() == 0) _MQTT_SERVER = "";
@@ -593,8 +522,8 @@ bool loadConfig() {
   if (_ADMIN_PASS.length() == 0) _ADMIN_PASS = "";
   if (_SSID.length() == 0) _SSID = "";
   if (_PASS.length() == 0) _PASS = "";
-//  if (_NTP_SERVER.length() == 0) _NTP_SERVER = "bg.pool.ntp.org";
-//  if (_TIMEZONE.length() == 0) _TIMEZONE = "2";
+  //  if (_NTP_SERVER.length() == 0) _NTP_SERVER = "bg.pool.ntp.org";
+  //  if (_TIMEZONE.length() == 0) _TIMEZONE = "2";
   if (_MQTT_SERVERPORT == 0) _MQTT_SERVERPORT = 1883;
   if (_RFIDS.length() == 0) _RFIDS = "";
 
@@ -623,34 +552,17 @@ void handle_configure() {
     if (server.argName(i) == "mqtt_username") _MQTT_USERNAME = server.arg(i);
     if (server.argName(i) == "mqtt_key") _MQTT_KEY = server.arg(i);
     if (server.argName(i) == "admin_password") _ADMIN_PASS = server.arg(i);
-//    if (server.argName(i) == "timezone") _TIMEZONE = server.arg(i).toInt();
-//    if (server.argName(i) == "ntp_server") _NTP_SERVER = server.arg(i);
-    if (server.argName(i) == "sched1_h_on") schedule[0].on_h = server.arg(i).toInt();
-    if (server.argName(i) == "sched1_m_on") schedule[0].on_m = server.arg(i).toInt();
-    if (server.argName(i) == "sched1_h_off") schedule[0].off_h = server.arg(i).toInt();
-    if (server.argName(i) == "sched1_m_off") schedule[0].off_m = server.arg(i).toInt();
-    if (server.argName(i) == "sched1_pin") schedule[0].pin = server.arg(i).toInt();
-    if (server.argName(i) == "sched2_h_on") schedule[1].on_h = server.arg(i).toInt();
-    if (server.argName(i) == "sched2_m_on") schedule[1].on_m = server.arg(i).toInt();
-    if (server.argName(i) == "sched2_h_off") schedule[1].off_h = server.arg(i).toInt();
-    if (server.argName(i) == "sched2_m_off") schedule[1].off_m = server.arg(i).toInt();
-    if (server.argName(i) == "sched2_pin") schedule[1].pin = server.arg(i).toInt();
-    if (server.argName(i) == "sched3_h_on") schedule[2].on_h = server.arg(i).toInt();
-    if (server.argName(i) == "sched3_m_on") schedule[2].on_m = server.arg(i).toInt();
-    if (server.argName(i) == "sched3_h_off") schedule[2].off_h = server.arg(i).toInt();
-    if (server.argName(i) == "sched3_m_off") schedule[2].off_m = server.arg(i).toInt();
-    if (server.argName(i) == "sched3_pin") schedule[2].pin = server.arg(i).toInt();
-    if (server.argName(i) == "sched4_h_on") schedule[3].on_h = server.arg(i).toInt();
-    if (server.argName(i) == "sched4_m_on") schedule[3].on_m = server.arg(i).toInt();
-    if (server.argName(i) == "sched4_h_off") schedule[3].off_h = server.arg(i).toInt();
-    if (server.argName(i) == "sched4_m_off") schedule[3].off_m = server.arg(i).toInt();
-    if (server.argName(i) == "sched4_pin") schedule[3].pin = server.arg(i).toInt();
-    if (server.argName(i) == "sched5_h_on") schedule[4].on_h = server.arg(i).toInt();
-    if (server.argName(i) == "sched5_m_on") schedule[4].on_m = server.arg(i).toInt();
-    if (server.argName(i) == "sched5_h_off") schedule[4].off_h = server.arg(i).toInt();
-    if (server.argName(i) == "sched5_m_off") schedule[4].off_m = server.arg(i).toInt();
-    if (server.argName(i) == "sched5_pin") schedule[4].pin = server.arg(i).toInt();
+    //    if (server.argName(i) == "timezone") _TIMEZONE = server.arg(i).toInt();
+    //    if (server.argName(i) == "ntp_server") _NTP_SERVER = server.arg(i);
     if (server.argName(i) == "rfids") _RFIDS = server.arg(i);
+    if (server.argName(i) == "sched1_h_on") schedule[0].time_on = server.arg(i).toInt() * 3600;
+    if (server.argName(i) == "sched1_m_on") schedule[0].time_on += server.arg(i).toInt() * 60;
+    if (server.argName(i) == "sched1_h_off") schedule[0].time_off = server.arg(i).toInt() * 3600;
+    if (server.argName(i) == "sched1_m_off") schedule[0].time_off += server.arg(i).toInt() * 60;
+    if (server.argName(i) == "sched2_h_on") schedule[1].time_on = server.arg(i).toInt() * 3600;
+    if (server.argName(i) == "sched2_m_on") schedule[1].time_on += server.arg(i).toInt() * 60;
+    if (server.argName(i) == "sched2_h_off") schedule[1].time_off = server.arg(i).toInt() * 3600;
+    if (server.argName(i) == "sched2_m_off") schedule[1].time_off += server.arg(i).toInt() * 60;
   }
   StaticJsonBuffer<1000> jsonBuffer;
   JsonObject& json = jsonBuffer.createObject();
@@ -664,32 +576,11 @@ void handle_configure() {
   json["admin_password"] = _ADMIN_PASS;
   json["ntp_server"] = _NTP_SERVER;
   json["timezone"] = _TIMEZONE;
-  json["s1_h_on"] = schedule[0].on_h;
-  json["s1_m_on"] = schedule[0].on_m;
-  json["s1_h_off"] = schedule[0].off_h;
-  json["s1_m_off"] = schedule[0].off_m;
-  json["s1_pin"] = schedule[0].pin;
-  json["s2_h_on"] = schedule[1].on_h;
-  json["s2_m_on"] = schedule[1].on_m;
-  json["s2_h_off"] = schedule[1].off_h;
-  json["s2_m_off"] = schedule[1].off_m;
-  json["s2_pin"] = schedule[1].pin;
-  json["s3_h_on"] = schedule[2].on_h;
-  json["s3_m_on"] = schedule[2].on_m;
-  json["s3_h_off"] = schedule[2].off_h;
-  json["s3_m_off"] = schedule[2].off_m;
-  json["s3_pin"] = schedule[2].pin;
-  json["s4_h_on"] = schedule[3].on_h;
-  json["s4_m_on"] = schedule[3].on_m;
-  json["s4_h_off"] = schedule[3].off_h;
-  json["s4_m_off"] = schedule[3].off_m;
-  json["s4_pin"] = schedule[3].pin;
-  json["s5_h_on"] = schedule[4].on_h;
-  json["s5_m_on"] = schedule[4].on_m;
-  json["s5_h_off"] = schedule[4].off_h;
-  json["s5_m_off"] = schedule[4].off_m;
-  json["s5_pin"] = schedule[4].pin;
   json["rfids"] = _RFIDS;
+  json["time_on_1"] = schedule[0].time_on;
+  json["time_off_1"] = schedule[0].time_off;
+  json["time_on_2"] = schedule[1].time_on;
+  json["time_off_2"] = schedule[1].time_off;
 
   openFS();
   File configFile = SPIFFS.open(_CONFIG, "w");
@@ -714,7 +605,7 @@ void handle_showconfig() {
   openFS();
   if (SPIFFS.exists(_CONFIG)) {
     File file = SPIFFS.open(_CONFIG, "r");
-    size_t sent = server.streamFile(file, F("text/plain"));
+    size_t sent = server.streamFile(file, F("application/json"));
     file.close();
   } else {
     server.send(200, F("text/plain"), F("Config file not found."));
