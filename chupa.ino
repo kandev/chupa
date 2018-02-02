@@ -1,3 +1,5 @@
+#include <Time.h>
+#include <TimeLib.h>
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
 #include <NtpClientLib.h>
@@ -8,59 +10,51 @@
 #include <ESP8266httpUpdate.h>
 #include <Ticker.h>
 #include <AsyncMqttClient.h>
-#include "web_static.h";
 #include <Adafruit_Sensor.h>
-#include <DHT.h>
-#include <DHT_U.h>
-#define DHTPIN 14
-#define DHTTYPE DHT22
-DHT_Unified dht(DHTPIN, DHTTYPE);
-sensors_event_t dht_tevent;
-sensors_event_t dht_hevent;
+#include <ESP8266HTTPClient.h>
 ADC_MODE(ADC_VCC);  //read supply voltage by ESP.getVcc()
 
 //Main configuration
-const char* _VERSION = "0.172";
-const char* _PRODUCT = "Chupa";
+#define _ONBOARD_LED 2 //2 for most nodemcu
+#define _PIN_LED 13 //for sonoff it is 13
+#define _PIN1 12
+#define _PIN2 14
+#define _PIN_RESET 0
+#define _VERSION "0.189"
+#define _PRODUCT "Chupa"
+#define _UPDATE_SERVER "chupa.kandev.com"
+#define _UPDATE_PORT 80
+#define _UPDATE_URL "/"
+#define update_path "/update"
+#define update_username "chupa"
+#define update_password "apuhc"
+#define _UPDATE_CHECK_INTERVAL 60 // in seconds
+#define _DEEPSLEEP_INTERVAL 900 // in seconds
+#define _WATCHDOG_TIMEOUT 600 // in seconds
+#define _CONFIG "/config.json"
+#define _NTP_SERVER F("bg.pool.ntp.org")
+#define _TIMEZONE 2
+
 String _HOSTNAME = "";
-const char* _UPDATE_SERVER = "chupa.kandev.com";
-const byte _UPDATE_PORT = 80;
-const char* _UPDATE_URL = "/";
-const unsigned int _UPDATE_CHECK_INTERVAL = 1800; // in seconds
-int _DEEPSLEEP_INTERVAL = 900; // in seconds
-const unsigned int _WATCHDOG_TIMEOUT = 600; // in seconds
-String _MQTT_SERVER;
-unsigned int _MQTT_SERVERPORT;
-String _MQTT_USERNAME;
-String _MQTT_KEY;
-String _NTP_SERVER;
-const unsigned int _WIFI_TIMEOUT = 300;
-//const unsigned int _MQTT_TIMEOUT = 600;
-String _TIMEZONE;
+String _RFIDS;
 struct sched {
   byte on_h;
   byte on_m;
   byte off_h;
   byte off_m;
+  unsigned int on;
+  unsigned int off;
   byte pin;
 };
 sched schedule[5];
-
-const byte _PIN_RESET = 0;
-const byte _PIN_LED = 2;
-const byte _PIN1 = 4;
-const byte _PIN2 = 5;
-const byte _PIN3 = 12;
-const byte _PIN4 = 13;
-
+String _MQTT_SERVER;
+unsigned int _MQTT_SERVERPORT;
+String _MQTT_USERNAME;
+String _MQTT_KEY;
 String _SSID;
 String _PASS;
 String _ADMIN_PASS = "";
 bool _CLIENT = false; // are we client or AP?
-const char* _CONFIG = "/config.json";
-const char* update_path = "/update";
-const char* update_username = "chupa";
-const char* update_password = "apuhc";
 IPAddress timeServerIP;
 unsigned long reset_hold = 0;
 unsigned long switch_press = 0;
@@ -69,23 +63,40 @@ unsigned long blink_millis = 0;
 unsigned int mqtt_drop_count = 0;
 long last_update_check = 10000 - (_UPDATE_CHECK_INTERVAL * 1000);
 volatile int watchdog_counter = 0;
-unsigned long mqtt_lastReconnectAttempt = 0;
-unsigned long wifi_lastReconnectAttempt = 0;
 unsigned long mqtt_last = 0;
 Ticker secondTick;
+Ticker mqttReconnectTimer;
+Ticker wifiReconnectTimer;
+Ticker SiwtchOffDelay;
 ESP8266WebServer server(80);
 ESP8266HTTPUpdateServer httpUpdater;
 AsyncMqttClient mqttClient;
 unsigned int led_delay = 1;
 unsigned long last_wifi_connect_attempt = 0;
 String code = "";
+String mqtt_status;
+bool off_countdown = false;
+WiFiEventHandler wifiConnectHandler;
+WiFiEventHandler wifiDisconnectHandler;
+#include "web_static.h"
+
 
 void watchdog() {
   watchdog_counter++;
   if (watchdog_counter >= _WATCHDOG_TIMEOUT) {
-    Serial.println("WATCHDOG!");
+    Serial.println(F("WATCHDOG!"));
     ESP.restart();
   }
+}
+
+void led_on() {
+  digitalWrite(_PIN_LED, LOW);
+  digitalWrite(_ONBOARD_LED, LOW);
+}
+
+void led_off() {
+  digitalWrite(_PIN_LED, HIGH);
+  digitalWrite(_ONBOARD_LED, HIGH);
 }
 
 String getMacAddress() {
@@ -96,6 +107,29 @@ String getMacAddress() {
   for (int i = 0; i < sizeof(MAC_array); ++i)
     s += String(MAC_array[i], HEX);
   return s;
+}
+
+void send_msg(String s) {
+  HTTPClient http;
+  String srv = "http://" + String(_UPDATE_SERVER) + "/msg/";
+  String payload = "hostname=" + _HOSTNAME + "&mac=" + getMacAddress() + "&msg=" + s;
+  http.begin(srv);
+  http.addHeader("Content-Type", "application/x-www-form-urlencoded");
+  int c = http.POST(payload);
+  if (c > 0) {
+    Serial.print(F("Result code: "));
+    Serial.println(c);
+  } else {
+    Serial.println(F("MSG Sent!"));
+  }
+}
+
+void AllOff() {
+  switchpin(_PIN1, 0);
+  switchpin(_PIN2, 0);
+  SiwtchOffDelay.detach();
+  Serial.println(F("Disconnected for too long - all outputs down!"));
+  off_countdown=false;
 }
 
 bool openFS() {
@@ -114,151 +148,10 @@ void closeFS() {
   SPIFFS.end();
 }
 
-bool loadConfig() {
-  _HOSTNAME = String(_PRODUCT) + "-" + getMacAddress().substring(6);
-  _HOSTNAME.toLowerCase();
-  openFS();
-  File configFile = SPIFFS.open(_CONFIG, "r");
-  if (!configFile) {
-    Serial.println(F("[ERR] No configuration found."));
-    return false;
-  }
-
-  size_t size = configFile.size();
-  if (size > 1024) {
-    Serial.println(F("[ERR] configuration file is too large."));
-    return false;
-  }
-
-  std::unique_ptr<char[]> buf(new char[size]);
-  configFile.readBytes(buf.get(), size);
-  StaticJsonBuffer<1000> jsonBuffer;
-  JsonObject& json = jsonBuffer.parseObject(buf.get());
-
-  if (!json.success()) {
-    Serial.println(F("[ERR] Can't parse configuration file."));
-    return false;
-  }
-  const char* ssid = json["ssid"];
-  const char* pass = json["pass"];
-  const char* hostname = json["hostname"];
-  const char* mqtt_server = json["mqtt_server"];
-  _MQTT_SERVERPORT = json["mqtt_serverport"];
-  const char* mqtt_user = json["mqtt_username"];
-  const char* mqtt_key = json["mqtt_key"];
-  const char* admin_pass = json["admin_password"];
-  const char* ntp_server = json["ntp_server"];
-  const char* timezone = json["timezone"];
-  schedule[0].on_h = json["s1_h_on"];
-  schedule[0].on_m = json["s1_m_on"];
-  schedule[0].off_h = json["s1_h_off"];
-  schedule[0].off_m = json["s1_m_off"];
-  schedule[0].pin = json["s1_pin"];
-  schedule[1].on_h = json["s2_h_on"];
-  schedule[1].on_m = json["s2_m_on"];
-  schedule[1].off_h = json["s2_h_off"];
-  schedule[1].off_m = json["s2_m_off"];
-  schedule[1].pin = json["s2_pin"];
-  schedule[2].on_h = json["s3_h_on"];
-  schedule[2].on_m = json["s3_m_on"];
-  schedule[2].off_h = json["s3_h_off"];
-  schedule[2].off_m = json["s3_m_off"];
-  schedule[2].pin = json["s3_pin"];
-  schedule[3].on_h = json["s4_h_on"];
-  schedule[3].on_m = json["s4_m_on"];
-  schedule[3].off_h = json["s4_h_off"];
-  schedule[3].off_m = json["s4_m_off"];
-  schedule[3].pin = json["s4_pin"];
-  schedule[4].on_h = json["s5_h_on"];
-  schedule[4].on_m = json["s5_m_on"];
-  schedule[4].off_h = json["s5_h_off"];
-  schedule[4].off_m = json["s5_m_off"];
-  schedule[4].pin = json["s5_pin"];
-
-  if (String(hostname) != "")
-    _HOSTNAME = hostname;
-  _SSID = ssid;
-  _PASS = pass;
-  _MQTT_SERVER = mqtt_server;
-  _MQTT_USERNAME = mqtt_user;
-  _MQTT_KEY = mqtt_key;
-  _ADMIN_PASS = admin_pass;
-  _NTP_SERVER = ntp_server;
-  _TIMEZONE = timezone;
-
-  if (_MQTT_SERVER.length() == 0) _MQTT_SERVER = "";
-  if (_MQTT_USERNAME.length() == 0) _MQTT_USERNAME = "";
-  if (_MQTT_KEY.length() == 0) _MQTT_KEY = "";
-  if (_ADMIN_PASS.length() == 0) _ADMIN_PASS = "";
-  if (_SSID.length() == 0) _SSID = "";
-  if (_PASS.length() == 0) _PASS = "";
-  if (_NTP_SERVER.length() == 0) _NTP_SERVER = "bg.pool.ntp.org";
-  if (_TIMEZONE.length() == 0) _TIMEZONE = "2";
-  if (_MQTT_SERVERPORT == 0) _MQTT_SERVERPORT = 1883;
-
-  Serial.print(F("SSID: "));
-  Serial.println(_SSID);
-  closeFS();
-  return true;
-}
-
 void switchpin(int pin, int state) {
   digitalWrite(pin, state);
 }
 
-void get_data() {
-  if ((!server.authenticate("admin", _ADMIN_PASS.c_str())) && (_CLIENT))
-    server.requestAuthentication();
-  if (_NTP_SERVER == "") _NTP_SERVER = "bg.pool.ntp.org";
-  server.send ( 200, F("application/json"), "{ \"hostname\":\"" + String(_HOSTNAME) + "\", \
-        \"ssid\":\"" + String(_SSID) + "\", \
-        \"ntp_server\":\"" + _NTP_SERVER + "\", \
-        \"timezone\":\"" + _TIMEZONE + "\", \
-        \"password\":\"" + String(_PASS) + "\", \
-        \"mqtt_server\":\"" + _MQTT_SERVER + "\", \
-        \"mqtt_serverport\":\"" + _MQTT_SERVERPORT + "\", \
-        \"mqtt_username\":\"" + _MQTT_USERNAME + "\", \
-        \"mqtt_key\":\"" + _MQTT_KEY + "\", \
-        \"admin_password\":\"" + _ADMIN_PASS + "\", \
-        \"version\":\"" + String(_VERSION) + "\", \
-        \"rssi\":\"" + String(WiFi.RSSI()) + "\", \
-        \"time\":\"" + NTP.getTimeDateString() + "\", \
-        \"flash_size\":\"" + ESP.getFlashChipRealSize() / 1024 + "KB\", \
-        \"mac\":\"" + getMacAddress() + "\", \
-        \"vcc\":\"" + String(float(ESP.getVcc() / 1000.0)) + "\", \
-        \"pin1\":\"" + digitalRead(_PIN1) + "\", \
-        \"pin2\":\"" + digitalRead(_PIN2) + "\", \
-        \"pin3\":\"" + digitalRead(_PIN3) + "\", \
-        \"pin4\":\"" + digitalRead(_PIN4) + "\", \
-        \"sched1_pin\":\"" + schedule[0].pin + "\", \
-        \"sched1_h_on\":\"" + schedule[0].on_h + "\", \
-        \"sched1_m_on\":\"" + schedule[0].on_m + "\", \
-        \"sched1_h_off\":\"" + schedule[0].off_h + "\", \
-        \"sched1_m_off\":\"" + schedule[0].off_m + "\", \
-        \"sched2_pin\":\"" + schedule[1].pin + "\", \
-        \"sched2_h_on\":\"" + schedule[1].on_h + "\", \
-        \"sched2_m_on\":\"" + schedule[1].on_m + "\", \
-        \"sched2_h_off\":\"" + schedule[1].off_h + "\", \
-        \"sched2_m_off\":\"" + schedule[1].off_m + "\", \
-        \"sched3_pin\":\"" + schedule[2].pin + "\", \
-        \"sched3_h_on\":\"" + schedule[2].on_h + "\", \
-        \"sched3_m_on\":\"" + schedule[2].on_m + "\", \
-        \"sched3_h_off\":\"" + schedule[2].off_h + "\", \
-        \"sched3_m_off\":\"" + schedule[2].off_m + "\", \
-        \"sched4_pin\":\"" + schedule[3].pin + "\", \
-        \"sched4_h_on\":\"" + schedule[3].on_h + "\", \
-        \"sched4_m_on\":\"" + schedule[3].on_m + "\", \
-        \"sched4_h_off\":\"" + schedule[3].off_h + "\", \
-        \"sched4_m_off\":\"" + schedule[3].off_m + "\", \
-        \"sched5_pin\":\"" + schedule[4].pin + "\", \
-        \"sched5_h_on\":\"" + schedule[4].on_h + "\", \
-        \"sched5_m_on\":\"" + schedule[4].on_m + "\", \
-        \"sched5_h_off\":\"" + schedule[4].off_h + "\", \
-        \"sched5_m_off\":\"" + schedule[4].off_m + "\", \
-        \"temperature\":\"" + dht_tevent.temperature + "\", \
-        \"humidity\":\"" + dht_hevent.relative_humidity + "\" \
-                }" );
-}
 
 void scan_data() {
   if ((!server.authenticate("admin", _ADMIN_PASS.c_str())) && (_CLIENT))
@@ -271,7 +164,6 @@ void scan_data() {
     if (i < w - 1) wifis += ", ";
   }
   wifis += "}";
-  if (_NTP_SERVER == "") _NTP_SERVER = "bg.pool.ntp.org";
   server.send ( 200, F("application/json"), "{ \"ssid\":\"" + String(_SSID) + "\", \
     \"wifis\":" + wifis + " }");
 }
@@ -295,164 +187,31 @@ void html_gpio() {
         switchpin(_PIN1, 1);
         mqttClient.publish(String(_HOSTNAME + "/set/pin1").c_str(), 1, true, String(digitalRead(_PIN1)).c_str());
         mqttClient.publish(String(_HOSTNAME + "/status/pin1").c_str(), 1, true, String(digitalRead(_PIN1)).c_str());
+        send_msg(String("Web, PIN1=" + String(digitalRead(_PIN1))));
       } else {
         switchpin(_PIN1, 0);
         mqttClient.publish(String(_HOSTNAME + "/set/pin1").c_str(), 1, true, String(digitalRead(_PIN1)).c_str());
         mqttClient.publish(String(_HOSTNAME + "/status/pin1").c_str(), 1, true, String(digitalRead(_PIN1)).c_str());
+        send_msg(String("Web, PIN1=" + String(digitalRead(_PIN1))));
       }
     if (server.argName(i) == "pin2")
       if (server.arg(i) == "1") {
         switchpin(_PIN2, 1);
         mqttClient.publish(String(_HOSTNAME + "/set/pin2").c_str(), 1, true, String(digitalRead(_PIN2)).c_str());
         mqttClient.publish(String(_HOSTNAME + "/status/pin2").c_str(), 1, true, String(digitalRead(_PIN2)).c_str());
+        send_msg(String("Web, PIN2=" + String(digitalRead(_PIN2))));
       } else {
         switchpin(_PIN2, 0);
         mqttClient.publish(String(_HOSTNAME + "/set/pin2").c_str(), 1, true, String(digitalRead(_PIN2)).c_str());
         mqttClient.publish(String(_HOSTNAME + "/status/pin2").c_str(), 1, true, String(digitalRead(_PIN2)).c_str());
-      }
-    if (server.argName(i) == "pin3")
-      if (server.arg(i) == "1") {
-        switchpin(_PIN3, 1);
-        mqttClient.publish(String(_HOSTNAME + "/set/pin3").c_str(), 1, true, String(digitalRead(_PIN3)).c_str());
-        mqttClient.publish(String(_HOSTNAME + "/status/pin3").c_str(), 1, true, String(digitalRead(_PIN3)).c_str());
-      } else {
-        switchpin(_PIN3, 0);
-        mqttClient.publish(String(_HOSTNAME + "/set/pin3").c_str(), 1, true, String(digitalRead(_PIN3)).c_str());
-        mqttClient.publish(String(_HOSTNAME + "/status/pin3").c_str(), 1, true, String(digitalRead(_PIN3)).c_str());
-      }
-    if (server.argName(i) == "pin4")
-      if (server.arg(i) == "1") {
-        switchpin(_PIN4, 1);
-        mqttClient.publish(String(_HOSTNAME + "/set/pin4").c_str(), 1, true, String(digitalRead(_PIN4)).c_str());
-        mqttClient.publish(String(_HOSTNAME + "/status/pin4").c_str(), 1, true, String(digitalRead(_PIN4)).c_str());
-      } else {
-        switchpin(_PIN4, 0);
-        mqttClient.publish(String(_HOSTNAME + "/set/pin4").c_str(), 1, true, String(digitalRead(_PIN4)).c_str());
-        mqttClient.publish(String(_HOSTNAME + "/status/pin4").c_str(), 1, true, String(digitalRead(_PIN4)).c_str());
+        send_msg(String("Web, PIN2=" + String(digitalRead(_PIN2))));
       }
   }
   server.send ( 200, F("application/json"), "{ \
         \"time\":\"" + NTP.getTimeDateString() + "\", \
         \"pin1\":\"" + digitalRead(_PIN1) + "\", \
-        \"pin2\":\"" + digitalRead(_PIN2) + "\", \
-        \"pin3\":\"" + digitalRead(_PIN3) + "\", \
-        \"pin4\":\"" + digitalRead(_PIN4) + "\" \
+        \"pin2\":\"" + digitalRead(_PIN2) + "\" \
                 }" );
-}
-
-void handle_configure() {
-  if ((!server.authenticate("admin", _ADMIN_PASS.c_str())) && (_CLIENT))
-    server.requestAuthentication();
-  bool newssid, newpass;
-  for (int i = 0; i < server.args(); i++) {
-    if (server.argName(i) == "ssid") {
-      (_SSID == server.arg(i)) ? (newssid = false) : (newssid = true);
-      _SSID = server.arg(i);
-    }
-    if (server.argName(i) == "password") {
-      (_PASS == server.arg(i)) ? (newpass = false) : (newpass = true);
-      _PASS = server.arg(i);
-    }
-    if (server.argName(i) == "hostname") _HOSTNAME = server.arg(i);
-    if (server.argName(i) == "mqtt_server") _MQTT_SERVER = server.arg(i);
-    if (server.argName(i) == "mqtt_serverport") _MQTT_SERVERPORT = server.arg(i).toInt();
-    if (server.argName(i) == "mqtt_username") _MQTT_USERNAME = server.arg(i);
-    if (server.argName(i) == "mqtt_key") _MQTT_KEY = server.arg(i);
-    if (server.argName(i) == "admin_password") _ADMIN_PASS = server.arg(i);
-    if (server.argName(i) == "timezone") _TIMEZONE = server.arg(i).toInt();
-    if (server.argName(i) == "ntp_server") _NTP_SERVER = server.arg(i);
-    if (server.argName(i) == "sched1_h_on") schedule[0].on_h = server.arg(i).toInt();
-    if (server.argName(i) == "sched1_m_on") schedule[0].on_m = server.arg(i).toInt();
-    if (server.argName(i) == "sched1_h_off") schedule[0].off_h = server.arg(i).toInt();
-    if (server.argName(i) == "sched1_m_off") schedule[0].off_m = server.arg(i).toInt();
-    if (server.argName(i) == "sched1_pin") schedule[0].pin = server.arg(i).toInt();
-    if (server.argName(i) == "sched2_h_on") schedule[1].on_h = server.arg(i).toInt();
-    if (server.argName(i) == "sched2_m_on") schedule[1].on_m = server.arg(i).toInt();
-    if (server.argName(i) == "sched2_h_off") schedule[1].off_h = server.arg(i).toInt();
-    if (server.argName(i) == "sched2_m_off") schedule[1].off_m = server.arg(i).toInt();
-    if (server.argName(i) == "sched2_pin") schedule[1].pin = server.arg(i).toInt();
-    if (server.argName(i) == "sched3_h_on") schedule[2].on_h = server.arg(i).toInt();
-    if (server.argName(i) == "sched3_m_on") schedule[2].on_m = server.arg(i).toInt();
-    if (server.argName(i) == "sched3_h_off") schedule[2].off_h = server.arg(i).toInt();
-    if (server.argName(i) == "sched3_m_off") schedule[2].off_m = server.arg(i).toInt();
-    if (server.argName(i) == "sched3_pin") schedule[2].pin = server.arg(i).toInt();
-    if (server.argName(i) == "sched4_h_on") schedule[3].on_h = server.arg(i).toInt();
-    if (server.argName(i) == "sched4_m_on") schedule[3].on_m = server.arg(i).toInt();
-    if (server.argName(i) == "sched4_h_off") schedule[3].off_h = server.arg(i).toInt();
-    if (server.argName(i) == "sched4_m_off") schedule[3].off_m = server.arg(i).toInt();
-    if (server.argName(i) == "sched4_pin") schedule[3].pin = server.arg(i).toInt();
-    if (server.argName(i) == "sched5_h_on") schedule[4].on_h = server.arg(i).toInt();
-    if (server.argName(i) == "sched5_m_on") schedule[4].on_m = server.arg(i).toInt();
-    if (server.argName(i) == "sched5_h_off") schedule[4].off_h = server.arg(i).toInt();
-    if (server.argName(i) == "sched5_m_off") schedule[4].off_m = server.arg(i).toInt();
-    if (server.argName(i) == "sched5_pin") schedule[4].pin = server.arg(i).toInt();
-  }
-  StaticJsonBuffer<1000> jsonBuffer;
-  JsonObject& json = jsonBuffer.createObject();
-  json["ssid"] = _SSID;
-  json["pass"] = _PASS;
-  json["hostname"] = _HOSTNAME;
-  json["mqtt_server"] = _MQTT_SERVER;
-  json["mqtt_serverport"] = _MQTT_SERVERPORT;
-  json["mqtt_username"] = _MQTT_USERNAME;
-  json["mqtt_key"] = _MQTT_KEY;
-  json["admin_password"] = _ADMIN_PASS;
-  json["ntp_server"] = _NTP_SERVER;
-  json["timezone"] = _TIMEZONE;
-  json["s1_h_on"] = schedule[0].on_h;
-  json["s1_m_on"] = schedule[0].on_m;
-  json["s1_h_off"] = schedule[0].off_h;
-  json["s1_m_off"] = schedule[0].off_m;
-  json["s1_pin"] = schedule[0].pin;
-  json["s2_h_on"] = schedule[1].on_h;
-  json["s2_m_on"] = schedule[1].on_m;
-  json["s2_h_off"] = schedule[1].off_h;
-  json["s2_m_off"] = schedule[1].off_m;
-  json["s2_pin"] = schedule[1].pin;
-  json["s3_h_on"] = schedule[2].on_h;
-  json["s3_m_on"] = schedule[2].on_m;
-  json["s3_h_off"] = schedule[2].off_h;
-  json["s3_m_off"] = schedule[2].off_m;
-  json["s3_pin"] = schedule[2].pin;
-  json["s4_h_on"] = schedule[3].on_h;
-  json["s4_m_on"] = schedule[3].on_m;
-  json["s4_h_off"] = schedule[3].off_h;
-  json["s4_m_off"] = schedule[3].off_m;
-  json["s4_pin"] = schedule[3].pin;
-  json["s5_h_on"] = schedule[4].on_h;
-  json["s5_m_on"] = schedule[4].on_m;
-  json["s5_h_off"] = schedule[4].off_h;
-  json["s5_m_off"] = schedule[4].off_m;
-  json["s5_pin"] = schedule[4].pin;
-  openFS();
-  File configFile = SPIFFS.open(_CONFIG, "w");
-  int error = 0;
-  if (!configFile) {
-    Serial.println(F("[ERR] Configuration can't be saved for some reason."));
-    error = 1;
-  }
-  json.printTo(configFile);
-  closeFS();
-  if (error == 0) {
-    server.send(200, F("text/html"), F("<meta http-equiv=\"refresh\" content=\"5; url=/\" />[OK]"));
-  } else {
-    server.send(200, F("text/plain"), F("[ERR]"));
-  }
-  if ((newssid) && (newpass)) ESP.restart();
-}
-
-void handle_showconfig() {
-  if (!server.authenticate("admin", _ADMIN_PASS.c_str()))
-    server.requestAuthentication();
-  openFS();
-  if (SPIFFS.exists(_CONFIG)) {
-    File file = SPIFFS.open(_CONFIG, "r");
-    size_t sent = server.streamFile(file, F("text/plain"));
-    file.close();
-  } else {
-    server.send(200, F("text/plain"), F("Config file not found."));
-  }
-  closeFS();
 }
 
 void handle_deleteconfig() {
@@ -466,10 +225,17 @@ void handle_deleteconfig() {
   ESP.restart();
 }
 
+void handle_reboot() {
+  if (!server.authenticate("admin", _ADMIN_PASS.c_str()))
+    server.requestAuthentication();
+  Serial.println(F("Restarting..."));
+  server.send(200, F("text/html"), F("<meta http-equiv=\"refresh\" content=\"5; url=/\" />[OK] Restarting..."));
+  ESP.restart();
+}
+
 void checkforupdate() {
   float vcc = ESP.getVcc() / 1000.0; // supply voltage
   Serial.println(F("Checking for update..."));
-  get_dht();
   auto ret = ESPhttpUpdate.update(_UPDATE_SERVER, _UPDATE_PORT, _UPDATE_URL, _VERSION);
   mqttClient.publish(String(_HOSTNAME + "/status/online").c_str(), 1, true, "1");
   mqttClient.publish(String(_HOSTNAME + "/status/rssi").c_str(), 1, true, String(WiFi.RSSI()).c_str());
@@ -481,26 +247,30 @@ void checkforupdate() {
   mqttClient.publish(String(_HOSTNAME + "/status/time").c_str(), 1, true, NTP.getTimeDateString().c_str());
   mqttClient.publish(String(_HOSTNAME + "/status/pin1").c_str(), 1, true, String(digitalRead(_PIN1)).c_str());
   mqttClient.publish(String(_HOSTNAME + "/status/pin2").c_str(), 1, true, String(digitalRead(_PIN2)).c_str());
-  mqttClient.publish(String(_HOSTNAME + "/status/pin3").c_str(), 1, true, String(digitalRead(_PIN3)).c_str());
-  mqttClient.publish(String(_HOSTNAME + "/status/pin4").c_str(), 1, true, String(digitalRead(_PIN4)).c_str());
   server.send(200, F("text/plain"), F("Checking for update..."));
+  //check if mqtt is disconnected and reconnect
+  if ((!mqttClient.connected()) && (_MQTT_SERVER.length() > 0))
+    connectToMqtt();
 }
 
+void connectToMqtt() {
+  IPAddress mqttIP;
+  if (WiFi.isConnected()) {
+    Serial.println(F("Connecting to MQTT..."));
+    WiFi.hostByName(_MQTT_SERVER.c_str(), mqttIP);
+    Serial.println(String("Connecting to MQTT broker " + _MQTT_SERVER + ", resolved to " + mqttIP.toString()));
+    mqttClient.setServer(mqttIP, _MQTT_SERVERPORT);
+    mqttReconnectTimer.detach();
+    mqttClient.connect();
+  }
+}
 void onMqttConnect(bool sessionPresent) {
   String subs = _HOSTNAME + "/set/#";
   mqttClient.subscribe(subs.c_str(), 2);
   Serial.print(String("Subscribing to: [" + subs + "]... "));
 }
 void onMqttDisconnect(AsyncMqttClientDisconnectReason reason) {
-  unsigned long currentMillis = millis();
-  if ((currentMillis - mqtt_lastReconnectAttempt) / 1000 >= 30) {
-    IPAddress mqttIP;
-    WiFi.hostByName(_MQTT_SERVER.c_str(), mqttIP);
-    Serial.println(String("Connecting to MQTT broker " + _MQTT_SERVER + ", resolved to " + mqttIP.toString()));
-    mqttClient.setServer(mqttIP, _MQTT_SERVERPORT);
-    mqtt_lastReconnectAttempt = currentMillis;
-    mqttClient.connect();
-  }
+  mqttReconnectTimer.attach(30, connectToMqtt);
 }
 void onMqttSubscribe(uint16_t packetId, uint8_t qos) {
   Serial.println(F("[OK] MQTT subscription done!"));
@@ -513,32 +283,13 @@ void onMqttMessage(char* topic, char* payload, AsyncMqttClientMessageProperties 
     if ((char)payload[0] == '0') switchpin(_PIN1, 0);
     if ((char)payload[0] == '1') switchpin(_PIN1, 1);
     mqttClient.publish(String(_HOSTNAME + "/status/pin1").c_str(), 1, true, String(digitalRead(_PIN1)).c_str());
+    send_msg(String("MQTT request, PIN1=" + String(digitalRead(_PIN1))));
   }
   if (msg == "/set/pin2") {
     if ((char)payload[0] == '0') switchpin(_PIN2, 0);
     if ((char)payload[0] == '1') switchpin(_PIN2, 1);
     mqttClient.publish(String(_HOSTNAME + "/status/pin2").c_str(), 1, true, String(digitalRead(_PIN2)).c_str());
-  }
-  if (msg == "/set/pin3") {
-    if ((char)payload[0] == '0') switchpin(_PIN3, 0);
-    if ((char)payload[0] == '1') switchpin(_PIN3, 1);
-    mqttClient.publish(String(_HOSTNAME + "/status/pin3").c_str(), 1, true, String(digitalRead(_PIN3)).c_str());
-  }
-  if (msg == "/set/pin4") {
-    if ((char)payload[0] == '0') switchpin(_PIN4, 0);
-    if ((char)payload[0] == '1') switchpin(_PIN4, 1);
-    mqttClient.publish(String(_HOSTNAME + "/status/pin4").c_str(), 1, true, String(digitalRead(_PIN4)).c_str());
-  }
-}
-
-void get_dht() {
-  dht.temperature().getEvent(&dht_tevent);
-  if (isnan(dht_tevent.temperature)) {
-    Serial.println("Error reading temperature!");
-  }
-  dht.humidity().getEvent(&dht_hevent);
-  if (isnan(dht_hevent.relative_humidity)) {
-    Serial.println("Error reading humidity!");
+    send_msg(String("MQTT request, PIN2=" + String(digitalRead(_PIN2))));
   }
 }
 
@@ -546,6 +297,7 @@ void wifi_connect() {
   if (_SSID == "") _SSID = _HOSTNAME;
   WiFi.hostname(_HOSTNAME);
   if (!_CLIENT) {
+    wifiReconnectTimer.detach();
     led_delay = 1000;  //if in mode AP blink faster
     Serial.printf("SSID: %s\r\n", _SSID.c_str());
     if (_PASS != "") Serial.printf("Password: %s\r\n", _PASS.c_str());
@@ -557,6 +309,7 @@ void wifi_connect() {
     Serial.print(F("To configure the device, please connect to the wifi network and open http://"));
     Serial.println(myIP.toString().c_str());
   } else {
+    wifiReconnectTimer.detach();
     led_delay = 5000;  //if client - blink once every 5 seconds
     last_wifi_connect_attempt = millis();
     Serial.print(F("Connecting to "));
@@ -566,19 +319,39 @@ void wifi_connect() {
     while ((WiFi.status() != WL_CONNECTED) && ((millis() - last_wifi_connect_attempt) < 20000)) {
       delay(200);
       Serial.print(".");
-      digitalWrite(_PIN_LED, LOW);
+      led_on();
       delay(20);
-      digitalWrite(_PIN_LED, HIGH);
+      led_off();
       yield();
       if (digitalRead(_PIN_RESET) == 0) return;
     }
     Serial.println();
     if (WiFi.status() == WL_CONNECTED) {
-      Serial.println("[OK] Connected.");
+      Serial.println(F("[OK] Connected."));
+      if (_MQTT_SERVER.length() > 0)
+        mqttReconnectTimer.attach(5, connectToMqtt);
     } else {
-      Serial.println("[ERR] Will try again in a minute.");
+      Serial.println(F("[ERR] Will try again in a minute."));
       led_delay = 1000;
     }
+  }
+}
+
+void onWifiConnect(const WiFiEventStationModeGotIP& event) {
+  Serial.println(F("Connected to Wi-Fi."));
+  if (_MQTT_SERVER.length() > 0)
+    mqttReconnectTimer.attach(5, connectToMqtt);
+  SiwtchOffDelay.detach();
+  off_countdown=false;
+}
+
+void onWifiDisconnect(const WiFiEventStationModeDisconnected& event) {
+  Serial.println(F("Disconnected from Wi-Fi"));
+  mqttReconnectTimer.detach(); // ensure we don't reconnect to MQTT while reconnecting to Wi-Fi
+  wifiReconnectTimer.attach(10, wifi_connect);
+  if (!off_countdown) {
+    SiwtchOffDelay.attach(60, AllOff);
+    off_countdown=true;
   }
 }
 
@@ -588,18 +361,18 @@ void setup()
   secondTick.attach(1, watchdog);
   pinMode(_PIN1, OUTPUT); digitalWrite(_PIN1, LOW);
   pinMode(_PIN2, OUTPUT); digitalWrite(_PIN2, LOW);
-  pinMode(_PIN3, OUTPUT); digitalWrite(_PIN3, LOW);
-  pinMode(_PIN4, OUTPUT); digitalWrite(_PIN4, LOW);
-  pinMode(_PIN_LED, OUTPUT); digitalWrite(_PIN_LED, LOW);
+  pinMode(_PIN_LED, OUTPUT);
   pinMode(_PIN_RESET, INPUT_PULLUP);  //factory reset
-  dht.begin();
-  get_dht();
+  pinMode(_ONBOARD_LED, OUTPUT); //onboard led
+  led_off();
 
   Serial.begin(115200); Serial.println();
   Serial.print(_PRODUCT);
   Serial.print(F(", "));
   Serial.println(_VERSION);
   _CLIENT = loadConfig();
+  wifiConnectHandler = WiFi.onStationModeGotIP(onWifiConnect);
+  wifiDisconnectHandler = WiFi.onStationModeDisconnected(onWifiDisconnect);
   wifi_connect();
   server.on("/configure", handle_configure);
   server.on("/config.json", handle_showconfig);
@@ -607,6 +380,7 @@ void setup()
   server.on("/data", get_data);
   server.on("/scan", scan_data);
   server.on("/gpio", html_gpio);
+  server.on("/reboot", handle_reboot);
   server.on("/", html_root);
   server.on("/favicon.svg", html_favicon);
   server.begin();
@@ -629,15 +403,14 @@ void setup()
     Serial.print(_MQTT_SERVER);
     Serial.print(F(", resolved to "));
     Serial.println(mqttIP.toString());
-    mqttClient.connect();
-    if (NTP.begin(String(_NTP_SERVER), _TIMEZONE.toInt(), true))
+    if (NTP.begin(String(_NTP_SERVER), _TIMEZONE, true))
       Serial.println(F("[OK] NTP..."));
     else
       Serial.println(F("[ERR] NTP not initialized."));
     NTP.setInterval(3600);  //ntp sync once per hour
   }
+  Serial.println("RFIDs:");
 }
-
 
 void loop() {
   server.handleClient();
@@ -648,7 +421,7 @@ void loop() {
       reset_hold = millis();
     Serial.println(F("!"));
     if (millis() - reset_hold >= 10000) {
-      digitalWrite(_PIN_LED, LOW);
+      led_on();
       delay(1000);
       handle_deleteconfig();
     }
@@ -665,6 +438,7 @@ void loop() {
       mqttClient.publish(String(_HOSTNAME + "/set/pin1").c_str(), 1, true, String(digitalRead(_PIN1)).c_str());
       mqttClient.publish(String(_HOSTNAME + "/status/pin1").c_str(), 1, true, String(digitalRead(_PIN1)).c_str());
       switch_press_done = true;
+      send_msg(String("Button press, PIN1=" + String(digitalRead(_PIN1))));
     }
   } else {
     switch_press = 0;
@@ -673,9 +447,15 @@ void loop() {
 
   //handle blinking frequency
   if (millis() - blink_millis >= led_delay) {
-    digitalWrite(_PIN_LED, LOW);
-    delay(1);
-    digitalWrite(_PIN_LED, HIGH);
+    led_on();
+    delay(2);
+    led_off();
+    if (digitalRead(_PIN1) == 1) {
+      delay(100);
+      led_on();
+      delay(2);
+      led_off();
+    }
     blink_millis = millis();
   }
 
@@ -684,48 +464,15 @@ void loop() {
     if ((WiFi.status() == WL_DISCONNECTED) && (millis() - last_wifi_connect_attempt > 90000)) {
       Serial.println(F("[ERR] Reconnecting."));
       WiFi.disconnect();
-      wifi_connect();
+      mqttReconnectTimer.detach(); // ensure we don't reconnect to MQTT while reconnecting to Wi-Fi
+      wifiReconnectTimer.attach(5, wifi_connect);
     }
 
     //update check
     if ((millis() - last_update_check) / 1000 >= _UPDATE_CHECK_INTERVAL) {
       last_update_check = millis();
-      if (WiFi.status() == WL_CONNECTED)
+      if (WiFi.status() == WL_CONNECTED) {
         checkforupdate();
-    }
-  }
-
-  //scheduler
-  for (byte q = 0; q < 5; q++) {
-    if (schedule[q].pin != 0) {
-      unsigned int on_time = (schedule[q].on_h * 60) + schedule[q].on_m;
-      unsigned int off_time = (schedule[q].off_h * 60) + schedule[q].off_m;
-      unsigned int time_now = (hour() * 60) + minute();
-      if (on_time < off_time) {
-        if ((time_now >= on_time) && (time_now < off_time)) {
-          if (schedule[q].pin == 1) switchpin(_PIN1, 1);
-          if (schedule[q].pin == 2) switchpin(_PIN2, 1);
-          if (schedule[q].pin == 3) switchpin(_PIN3, 1);
-          if (schedule[q].pin == 4) switchpin(_PIN4, 1);
-        } else {
-          if (schedule[q].pin == 1) switchpin(_PIN1, 0);
-          if (schedule[q].pin == 2) switchpin(_PIN2, 0);
-          if (schedule[q].pin == 3) switchpin(_PIN3, 0);
-          if (schedule[q].pin == 4) switchpin(_PIN4, 0);
-        }
-      }
-      if (on_time > off_time) {
-        if ((time_now >= off_time) && (time_now < on_time)) {
-          if (schedule[q].pin == 1) switchpin(_PIN1, 0);
-          if (schedule[q].pin == 2) switchpin(_PIN2, 0);
-          if (schedule[q].pin == 3) switchpin(_PIN3, 0);
-          if (schedule[q].pin == 4) switchpin(_PIN4, 0);
-        } else {
-          if (schedule[q].pin == 1) switchpin(_PIN1, 1);
-          if (schedule[q].pin == 2) switchpin(_PIN2, 1);
-          if (schedule[q].pin == 3) switchpin(_PIN3, 1);
-          if (schedule[q].pin == 4) switchpin(_PIN4, 1);
-        }
       }
     }
   }
@@ -739,6 +486,7 @@ void loop() {
       mqttClient.publish(String(_HOSTNAME + "/status/pin1").c_str(), 1, true, String(digitalRead(_PIN1)).c_str());
       Serial.print(F("PIN1 set to "));
       Serial.println(digitalRead(_PIN1));
+      send_msg(String("Serial, PIN1=" + String(digitalRead(_PIN1))));
     }
     if (c == '2') {
       (digitalRead(_PIN2) == 0) ? (switchpin(_PIN2, 1)) : (switchpin(_PIN2, 0));
@@ -746,23 +494,16 @@ void loop() {
       mqttClient.publish(String(_HOSTNAME + "/status/pin2").c_str(), 1, true, String(digitalRead(_PIN2)).c_str());
       Serial.print(F("PIN2 set to "));
       Serial.println(digitalRead(_PIN2));
-    }
-    if (c == '3') {
-      (digitalRead(_PIN3) == 0) ? (switchpin(_PIN3, 1)) : (switchpin(_PIN3, 0));
-      mqttClient.publish(String(_HOSTNAME + "/set/pin3").c_str(), 1, true, String(digitalRead(_PIN3)).c_str());
-      mqttClient.publish(String(_HOSTNAME + "/status/pin3").c_str(), 1, true, String(digitalRead(_PIN3)).c_str());
-      Serial.print(F("PIN3 set to "));
-      Serial.println(digitalRead(_PIN3));
-    }
-    if (c == '4') {
-      (digitalRead(_PIN4) == 0) ? (switchpin(_PIN4, 1)) : (switchpin(_PIN4, 0));
-      mqttClient.publish(String(_HOSTNAME + "/set/pin4").c_str(), 1, true, String(digitalRead(_PIN4)).c_str());
-      mqttClient.publish(String(_HOSTNAME + "/status/pin4").c_str(), 1, true, String(digitalRead(_PIN4)).c_str());
-      Serial.print(F("PIN4 set to "));
-      Serial.println(digitalRead(_PIN4));
+      send_msg(String("Serial, PIN2=" + String(digitalRead(_PIN2))));
     }
     if (c == '\r') {
       Serial.println();
+      if (code == "?") {
+        Serial.println(F("Chupa shell help."));
+        Serial.println(F("w\t- Wifi scan"));
+        Serial.println(F("msg\t- Send test email message"));
+        Serial.println(F("reset\t- Factory reset"));
+      }
       if (code == "w") {
         Serial.println(F("Scanning for wifi networks..."));
         int w = WiFi.scanNetworks();
@@ -773,23 +514,22 @@ void loop() {
           Serial.print(WiFi.SSID(i));
           Serial.print(F("\t\t ["));
           Serial.print(WiFi.RSSI(i));
-          Serial.println("dBi]");
+          Serial.print("dBi, ch:");
+          Serial.print(WiFi.channel(i));
+          Serial.print(", ");
+          Serial.print(WiFi.BSSIDstr(i));
+          Serial.println("]");
         }
       }
       if (code == "reset") {
         Serial.println(F("Reset command accepted. Please wait..."));
-        digitalWrite(_PIN_LED, LOW);
+        led_on();
         delay(1000);
         handle_deleteconfig();
       }
-      if (code == "?") {
-        get_dht();
-        Serial.print("Humidity: ");
-        Serial.print(dht_hevent.relative_humidity);
-        Serial.println("%");
-        Serial.print("Temperature: ");
-        Serial.print(dht_tevent.temperature);
-        Serial.println(" *C");
+      if (code == "msg") {
+        Serial.println(F("Sending message..."));
+        send_msg("hello world!");
       }
       Serial.print(_HOSTNAME);
       Serial.print(">");
