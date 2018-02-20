@@ -1,5 +1,4 @@
-#include <Time.h>
-#include <TimeLib.h>
+#include <EEPROM.h>
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
 #include <NtpClientLib.h>
@@ -20,7 +19,7 @@ ADC_MODE(ADC_VCC);  //read supply voltage by ESP.getVcc()
 #define _PIN1 12
 #define _PIN2 14
 #define _PIN_RESET 0
-#define _VERSION "0.190"
+#define _VERSION "0.206"
 #define _PRODUCT "Chupa"
 #define _UPDATE_SERVER "chupa.kandev.com"
 #define _UPDATE_PORT 80
@@ -28,12 +27,14 @@ ADC_MODE(ADC_VCC);  //read supply voltage by ESP.getVcc()
 #define update_path "/update"
 #define update_username "chupa"
 #define update_password "apuhc"
-#define _UPDATE_CHECK_INTERVAL 60 // in seconds
 #define _DEEPSLEEP_INTERVAL 900 // in seconds
 #define _WATCHDOG_TIMEOUT 600 // in seconds
 #define _CONFIG "/config.json"
 #define _NTP_SERVER F("bg.pool.ntp.org")
 #define _TIMEZONE 2
+#define _SYSLOG "/syslog"
+#define _addr_output1 0
+#define _addr_output2 1
 
 String _HOSTNAME = "";
 String _RFIDS;
@@ -51,26 +52,27 @@ String _PASS;
 String _ADMIN_PASS = "";
 bool _CLIENT = false; // are we client or AP?
 IPAddress timeServerIP;
-unsigned long reset_hold = 0;
-unsigned long switch_press = 0;
-bool switch_press_done = false;
 unsigned long blink_millis = 0;
 unsigned int mqtt_drop_count = 0;
-long last_update_check = 10000 - (_UPDATE_CHECK_INTERVAL * 1000);
 volatile int watchdog_counter = 0;
 unsigned long mqtt_last = 0;
 Ticker secondTick;
 Ticker mqttReconnectTimer;
 Ticker wifiReconnectTimer;
 Ticker SiwtchOffDelay;
+Ticker update_check;
 ESP8266WebServer server(80);
 ESP8266HTTPUpdateServer httpUpdater;
 AsyncMqttClient mqttClient;
 unsigned int led_delay = 1;
 unsigned long last_wifi_connect_attempt = 0;
+unsigned long switch_hold_time = 0;
+unsigned long switch_moment = 0;
 String code = "";
 String mqtt_status;
 bool off_countdown = false;
+bool _time_for_update = false;
+unsigned int current_second = 0;
 WiFiEventHandler wifiConnectHandler;
 WiFiEventHandler wifiDisconnectHandler;
 #include "web_static.h"
@@ -80,6 +82,7 @@ void watchdog() {
   watchdog_counter++;
   if (watchdog_counter >= _WATCHDOG_TIMEOUT) {
     Serial.println(F("WATCHDOG!"));
+    write_log(F("Restart by watchdog!"));
     ESP.restart();
   }
 }
@@ -94,6 +97,10 @@ void led_off() {
   digitalWrite(_ONBOARD_LED, HIGH);
 }
 
+void initiate_update() {
+  _time_for_update = true;
+}
+
 String getMacAddress() {
   char mac[12];
   String s = "";
@@ -104,7 +111,12 @@ String getMacAddress() {
   return s;
 }
 
+int secs_day() {
+  return second() + (minute() * 60) + (hour() * 3600);
+}
+
 void send_msg(String s) {
+  Serial.println();
   HTTPClient http;
   String srv = "http://" + String(_UPDATE_SERVER) + "/msg/";
   String payload = "hostname=" + _HOSTNAME + "&mac=" + getMacAddress() + "&msg=" + s;
@@ -112,11 +124,48 @@ void send_msg(String s) {
   http.addHeader("Content-Type", "application/x-www-form-urlencoded");
   int c = http.POST(payload);
   if (c > 0) {
-    Serial.print(F("Result code: "));
+    Serial.print(F("MSG Result code: "));
     Serial.println(c);
   } else {
     Serial.println(F("MSG Sent!"));
   }
+}
+
+void write_log(String s) {
+  openFS();
+  File f = SPIFFS.open(_SYSLOG, "a");
+  if (!f)
+    Serial.println(F("file open failed"));
+  f.println(String(NTP.getTimeDateString() + ": " + s).c_str());
+  f.close();
+  closeFS();
+}
+
+void handle_syslog() {
+  if (!server.authenticate("admin", _ADMIN_PASS.c_str()))
+    server.requestAuthentication();
+  openFS();
+  if (SPIFFS.exists(_SYSLOG)) {
+    File file = SPIFFS.open("/syslog", "r");
+    size_t sent = server.streamFile(file, F("text/plain"));
+    file.close();
+  } else {
+    server.send(200, F("text/plain"), F("Syslog file not found."));
+  }
+  closeFS();
+}
+
+void handle_syslog_delete() {
+  if (!server.authenticate("admin", _ADMIN_PASS.c_str()))
+    server.requestAuthentication();
+  openFS();
+  File f = SPIFFS.open(_SYSLOG, "w");
+  if (!f)
+    Serial.println(F("file open failed"));
+  f.println(String(NTP.getTimeDateString() + ": Syslog erased.").c_str());
+  f.close();
+  closeFS();
+  server.send(200, F("text/html"), F("<meta http-equiv=\"refresh\" content=\"5; url=/\" />[OK] Syslog erased."));
 }
 
 void AllOff() {
@@ -124,7 +173,8 @@ void AllOff() {
   switchpin(_PIN2, 0);
   SiwtchOffDelay.detach();
   Serial.println(F("Disconnected for too long - all outputs down!"));
-  off_countdown=false;
+  write_log(F("Disconnected for too long - all outputs down!"));
+  off_countdown = false;
 }
 
 bool openFS() {
@@ -143,8 +193,13 @@ void closeFS() {
   SPIFFS.end();
 }
 
-void switchpin(int pin, int state) {
+void switchpin(int pin, byte state) {
   digitalWrite(pin, state);
+  if (pin == _PIN1)
+    EEPROM.write(_addr_output1, state);
+  if (pin == _PIN2)
+    EEPROM.write(_addr_output2, state);
+  EEPROM.commit();
 }
 
 
@@ -179,11 +234,13 @@ void html_gpio() {
   for (int i = 0; i < server.args(); i++) {
     if (server.argName(i) == "pin1")
       if (server.arg(i) == "1") {
+        write_log(F("WEB PIN1=1"));
         switchpin(_PIN1, 1);
         mqttClient.publish(String(_HOSTNAME + "/set/pin1").c_str(), 1, true, String(digitalRead(_PIN1)).c_str());
         mqttClient.publish(String(_HOSTNAME + "/status/pin1").c_str(), 1, true, String(digitalRead(_PIN1)).c_str());
         send_msg(String("Web, PIN1=" + String(digitalRead(_PIN1))));
       } else {
+        write_log(F("WEB PIN1=0"));
         switchpin(_PIN1, 0);
         mqttClient.publish(String(_HOSTNAME + "/set/pin1").c_str(), 1, true, String(digitalRead(_PIN1)).c_str());
         mqttClient.publish(String(_HOSTNAME + "/status/pin1").c_str(), 1, true, String(digitalRead(_PIN1)).c_str());
@@ -191,11 +248,13 @@ void html_gpio() {
       }
     if (server.argName(i) == "pin2")
       if (server.arg(i) == "1") {
+        write_log(F("WEB PIN2=1"));
         switchpin(_PIN2, 1);
         mqttClient.publish(String(_HOSTNAME + "/set/pin2").c_str(), 1, true, String(digitalRead(_PIN2)).c_str());
         mqttClient.publish(String(_HOSTNAME + "/status/pin2").c_str(), 1, true, String(digitalRead(_PIN2)).c_str());
         send_msg(String("Web, PIN2=" + String(digitalRead(_PIN2))));
       } else {
+        write_log(F("WEB PIN2=0"));
         switchpin(_PIN2, 0);
         mqttClient.publish(String(_HOSTNAME + "/set/pin2").c_str(), 1, true, String(digitalRead(_PIN2)).c_str());
         mqttClient.publish(String(_HOSTNAME + "/status/pin2").c_str(), 1, true, String(digitalRead(_PIN2)).c_str());
@@ -210,6 +269,7 @@ void html_gpio() {
 }
 
 void handle_deleteconfig() {
+  Serial.println();
   if (!server.authenticate("admin", _ADMIN_PASS.c_str()))
     server.requestAuthentication();
   if (!SPIFFS.format())
@@ -217,74 +277,70 @@ void handle_deleteconfig() {
   else
     Serial.println(F("[OK] Flash formatted."));
   Serial.println(F("Restarting..."));
+  write_log(F("Configuration erased."));
   ESP.restart();
 }
 
 void handle_reboot() {
   if (!server.authenticate("admin", _ADMIN_PASS.c_str()))
     server.requestAuthentication();
+  led_on();
+  Serial.println();
   Serial.println(F("Restarting..."));
   server.send(200, F("text/html"), F("<meta http-equiv=\"refresh\" content=\"5; url=/\" />[OK] Restarting..."));
+  write_log(F("Reboot by web!"));
+  delay(1000);
   ESP.restart();
 }
 
 void checkforupdate() {
-  float vcc = ESP.getVcc() / 1000.0; // supply voltage
+  Serial.println();
   Serial.println(F("Checking for update..."));
   auto ret = ESPhttpUpdate.update(_UPDATE_SERVER, _UPDATE_PORT, _UPDATE_URL, _VERSION);
-  mqttClient.publish(String(_HOSTNAME + "/status/online").c_str(), 1, true, "1");
-  mqttClient.publish(String(_HOSTNAME + "/status/rssi").c_str(), 1, true, String(WiFi.RSSI()).c_str());
-  mqttClient.publish(String(_HOSTNAME + "/status/vcc").c_str(), 1, true, String(vcc).c_str());
-  mqttClient.publish(String(_HOSTNAME + "/status/ip").c_str(), 1, true, WiFi.localIP().toString().c_str());
-  mqttClient.publish(String(_HOSTNAME + "/status/uptime").c_str(), 1, true, String(millis() / 1000).c_str());
-  mqttClient.publish(String(_HOSTNAME + "/status/version").c_str(), 1, true, _VERSION);
-  mqttClient.publish(String(_HOSTNAME + "/status/mac").c_str(), 1, true, getMacAddress().c_str());
-  mqttClient.publish(String(_HOSTNAME + "/status/time").c_str(), 1, true, NTP.getTimeDateString().c_str());
-  mqttClient.publish(String(_HOSTNAME + "/status/pin1").c_str(), 1, true, String(digitalRead(_PIN1)).c_str());
-  mqttClient.publish(String(_HOSTNAME + "/status/pin2").c_str(), 1, true, String(digitalRead(_PIN2)).c_str());
-  server.send(200, F("text/plain"), F("Checking for update..."));
-  //check if mqtt is disconnected and reconnect
-  if ((!mqttClient.connected()) && (_MQTT_SERVER.length() > 0))
-    connectToMqtt();
 }
 
 void connectToMqtt() {
   IPAddress mqttIP;
-  if (WiFi.isConnected()) {
-    Serial.println(F("Connecting to MQTT..."));
-    WiFi.hostByName(_MQTT_SERVER.c_str(), mqttIP);
-    Serial.println(String("Connecting to MQTT broker " + _MQTT_SERVER + ", resolved to " + mqttIP.toString()));
-    mqttClient.setServer(mqttIP, _MQTT_SERVERPORT);
-    mqttReconnectTimer.detach();
-    mqttClient.connect();
-  }
+  Serial.println(F("Connecting to MQTT..."));
+  WiFi.hostByName(_MQTT_SERVER.c_str(), mqttIP);
+  Serial.println(String("MQTT broker " + _MQTT_SERVER + " = " + mqttIP.toString()));
+  write_log(String("Connecting to MQTT broker " + _MQTT_SERVER + ":" + _MQTT_SERVERPORT + ", resolved to " + mqttIP.toString()));
+  mqttClient.setServer(mqttIP, _MQTT_SERVERPORT);
+  mqttClient.connect();
 }
+
 void onMqttConnect(bool sessionPresent) {
-  String subs = _HOSTNAME + "/set/#";
-  mqttClient.subscribe(subs.c_str(), 2);
-  Serial.print(String("Subscribing to: [" + subs + "]... "));
+  mqttClient.subscribe(String(_HOSTNAME + "/set/#").c_str(), 0);
+  mqttReconnectTimer.detach();
+  write_log(F("MQTT connected."));
 }
+
 void onMqttDisconnect(AsyncMqttClientDisconnectReason reason) {
-  mqttReconnectTimer.attach(30, connectToMqtt);
+  mqttReconnectTimer.attach(60, connectToMqtt);
+  write_log(F("MQTT disconnected."));
 }
+
 void onMqttSubscribe(uint16_t packetId, uint8_t qos) {
   Serial.println(F("[OK] MQTT subscription done!"));
+  write_log(F("MQTT subscription done."));
 }
+
 void onMqttMessage(char* topic, char* payload, AsyncMqttClientMessageProperties properties, size_t len, size_t index, size_t total) {
   String msg = String(topic);
+  write_log(topic);
   msg = msg.substring(msg.indexOf("/set/"));
   Serial.println(String("Received: " + msg + "=" + payload));
   if (msg == "/set/pin1") {
     if ((char)payload[0] == '0') switchpin(_PIN1, 0);
     if ((char)payload[0] == '1') switchpin(_PIN1, 1);
-    mqttClient.publish(String(_HOSTNAME + "/status/pin1").c_str(), 1, true, String(digitalRead(_PIN1)).c_str());
-    send_msg(String("MQTT request, PIN1=" + String(digitalRead(_PIN1))));
+    mqttClient.publish(String(_HOSTNAME + "/status/pin1").c_str(), 0, true, String(digitalRead(_PIN1)).c_str());
+    send_msg(String("MQTT, PIN1=" + String(digitalRead(_PIN1))));
   }
   if (msg == "/set/pin2") {
     if ((char)payload[0] == '0') switchpin(_PIN2, 0);
     if ((char)payload[0] == '1') switchpin(_PIN2, 1);
-    mqttClient.publish(String(_HOSTNAME + "/status/pin2").c_str(), 1, true, String(digitalRead(_PIN2)).c_str());
-    send_msg(String("MQTT request, PIN2=" + String(digitalRead(_PIN2))));
+    mqttClient.publish(String(_HOSTNAME + "/status/pin2").c_str(), 0, true, String(digitalRead(_PIN2)).c_str());
+    send_msg(String("MQTT, PIN2=" + String(digitalRead(_PIN2))));
   }
 }
 
@@ -313,21 +369,12 @@ void wifi_connect() {
     WiFi.begin(_SSID.c_str(), _PASS.c_str());
     while ((WiFi.status() != WL_CONNECTED) && ((millis() - last_wifi_connect_attempt) < 20000)) {
       delay(200);
-      Serial.print(".");
+      Serial.print(F("."));
       led_on();
       delay(20);
       led_off();
       yield();
       if (digitalRead(_PIN_RESET) == 0) return;
-    }
-    Serial.println();
-    if (WiFi.status() == WL_CONNECTED) {
-      Serial.println(F("[OK] Connected."));
-      if (_MQTT_SERVER.length() > 0)
-        mqttReconnectTimer.attach(5, connectToMqtt);
-    } else {
-      Serial.println(F("[ERR] Will try again in a minute."));
-      led_delay = 1000;
     }
   }
 }
@@ -337,25 +384,28 @@ void onWifiConnect(const WiFiEventStationModeGotIP& event) {
   if (_MQTT_SERVER.length() > 0)
     mqttReconnectTimer.attach(5, connectToMqtt);
   SiwtchOffDelay.detach();
-  off_countdown=false;
+  off_countdown = false;
+  write_log(F("Connected to WiFi"));
 }
 
 void onWifiDisconnect(const WiFiEventStationModeDisconnected& event) {
-  Serial.println(F("Disconnected from Wi-Fi"));
+  Serial.println(F("Disconnected from Wi-Fi."));
   mqttReconnectTimer.detach(); // ensure we don't reconnect to MQTT while reconnecting to Wi-Fi
   wifiReconnectTimer.attach(10, wifi_connect);
   if (!off_countdown) {
-    SiwtchOffDelay.attach(60, AllOff);
-    off_countdown=true;
+    SiwtchOffDelay.attach(300, AllOff);
+    off_countdown = true;
   }
+  write_log(F("Disconnected from WiFi"));
 }
 
-void setup()
-{
+void setup() {
   //watchdog init
   secondTick.attach(1, watchdog);
-  pinMode(_PIN1, OUTPUT); digitalWrite(_PIN1, LOW);
-  pinMode(_PIN2, OUTPUT); digitalWrite(_PIN2, LOW);
+  write_log(F("System startup..."));
+  update_check.attach(60, initiate_update);
+  pinMode(_PIN1, OUTPUT);
+  pinMode(_PIN2, OUTPUT);
   pinMode(_PIN_LED, OUTPUT);
   pinMode(_PIN_RESET, INPUT_PULLUP);  //factory reset
   pinMode(_ONBOARD_LED, OUTPUT); //onboard led
@@ -366,12 +416,27 @@ void setup()
   Serial.print(F(", "));
   Serial.println(_VERSION);
   _CLIENT = loadConfig();
+  EEPROM.begin(2);
+  if (EEPROM.read(_addr_output1) == 1)
+    switchpin(_PIN1, 1);
+  else
+    switchpin(_PIN1, 0);
+  if (EEPROM.read(_addr_output2) == 1)
+    switchpin(_PIN2, 1);
+  else
+    switchpin(_PIN2, 0);
+  Serial.print("Memory 1: ");
+  Serial.println(EEPROM.read(_addr_output1));
+  Serial.print("Memory 2: ");
+  Serial.println(EEPROM.read(_addr_output2));
   wifiConnectHandler = WiFi.onStationModeGotIP(onWifiConnect);
   wifiDisconnectHandler = WiFi.onStationModeDisconnected(onWifiDisconnect);
   wifi_connect();
   server.on("/configure", handle_configure);
   server.on("/config.json", handle_showconfig);
-  server.on("/check", checkforupdate);
+  server.on("/syslog", handle_syslog);
+  server.on("/syslog_delete", handle_syslog_delete);
+  server.on("/check", initiate_update);
   server.on("/data", get_data);
   server.on("/scan", scan_data);
   server.on("/gpio", html_gpio);
@@ -405,39 +470,30 @@ void setup()
     NTP.setInterval(3600);  //ntp sync once per hour
   }
   Serial.println("RFIDs:");
+  write_log(F("Init done!"));
 }
 
 void loop() {
   server.handleClient();
 
   // FACTORY RESET
-  if (digitalRead(_PIN_RESET) == 0) {
-    if (reset_hold == 0)
-      reset_hold = millis();
-    Serial.println(F("!"));
-    if (millis() - reset_hold >= 10000) {
-      led_on();
-      delay(1000);
-      handle_deleteconfig();
-    }
-  } else {
-    reset_hold = 0;
+  if ((digitalRead(_PIN_RESET) == 0) and (switch_hold_time >= 10000)) {
+    write_log(F("Factory reset by button"));
+    switch_hold_time = 0;
+    led_on();
+    send_msg(F("Factory reset initiated!"));
+    delay(1000);
+    handle_deleteconfig();
   }
 
   // Switch PIN1 when reset pin is pressed
-  if (digitalRead(_PIN_RESET) == 0) {
-    if (switch_press == 0)
-      switch_press = millis();
-    if ((millis() - switch_press >= 50) and (!switch_press_done)) {
-      (digitalRead(_PIN1) == 0) ? (switchpin(_PIN1, 1)) : (switchpin(_PIN1, 0));
-      mqttClient.publish(String(_HOSTNAME + "/set/pin1").c_str(), 1, true, String(digitalRead(_PIN1)).c_str());
-      mqttClient.publish(String(_HOSTNAME + "/status/pin1").c_str(), 1, true, String(digitalRead(_PIN1)).c_str());
-      switch_press_done = true;
-      send_msg(String("Button press, PIN1=" + String(digitalRead(_PIN1))));
-    }
-  } else {
-    switch_press = 0;
-    switch_press_done = false;
+  if ((digitalRead(_PIN_RESET) != 0) and (switch_hold_time >= 100)) {
+    write_log(F("Button pressed"));
+    switch_hold_time = 0;
+    (digitalRead(_PIN1) == 0) ? (switchpin(_PIN1, 1)) : (switchpin(_PIN1, 0));
+    mqttClient.publish(String(_HOSTNAME + "/set/pin1").c_str(), 0, true, String(digitalRead(_PIN1)).c_str());
+    mqttClient.publish(String(_HOSTNAME + "/status/pin1").c_str(), 0, true, String(digitalRead(_PIN1)).c_str());
+    send_msg(String("Button press, PIN1=" + String(digitalRead(_PIN1))));
   }
 
   //handle blinking frequency
@@ -454,20 +510,53 @@ void loop() {
     blink_millis = millis();
   }
 
-  if (_CLIENT) {
-    //handle disconnect event
-    if ((WiFi.status() == WL_DISCONNECTED) && (millis() - last_wifi_connect_attempt > 90000)) {
-      Serial.println(F("[ERR] Reconnecting."));
-      WiFi.disconnect();
-      mqttReconnectTimer.detach(); // ensure we don't reconnect to MQTT while reconnecting to Wi-Fi
-      wifiReconnectTimer.attach(5, wifi_connect);
+  if (_time_for_update) {
+    _time_for_update = false;
+    if (WiFi.status() == WL_CONNECTED) {
+      checkforupdate();
     }
+  }
 
-    //update check
-    if ((millis() - last_update_check) / 1000 >= _UPDATE_CHECK_INTERVAL) {
-      last_update_check = millis();
-      if (WiFi.status() == WL_CONNECTED) {
-        checkforupdate();
+  //scheduler
+  if (NTP.getLastNTPSync() > 0) {
+    if ((schedule[0].time_on != 0) and (schedule[0].time_off != 0)) {
+      if ((secs_day() == schedule[0].time_on) and (secs_day() != current_second)) {
+        write_log(F("It's time: PIN1=1"));
+        switchpin(_PIN1, 1);
+        mqttClient.publish(String(_HOSTNAME + "/set/pin1").c_str(), 0, true, String(digitalRead(_PIN1)).c_str());
+        mqttClient.publish(String(_HOSTNAME + "/status/pin1").c_str(), 0, true, String(digitalRead(_PIN1)).c_str());
+        send_msg(String("Scheduler, PIN1=" + String(digitalRead(_PIN1))));
+        Serial.println();
+        Serial.println(F("It's time: PIN1=1"));
+      }
+      if ((secs_day() == schedule[0].time_off) and (secs_day() != current_second)) {
+        write_log(F("It's time: PIN1=0"));
+        switchpin(_PIN1, 0);
+        mqttClient.publish(String(_HOSTNAME + "/set/pin1").c_str(), 0, true, String(digitalRead(_PIN1)).c_str());
+        mqttClient.publish(String(_HOSTNAME + "/status/pin1").c_str(), 0, true, String(digitalRead(_PIN1)).c_str());
+        send_msg(String("Scheduler, PIN1=" + String(digitalRead(_PIN1))));
+        Serial.println();
+        Serial.println(F("It's time: PIN1=0"));
+      }
+    }
+    if ((schedule[1].time_on != 0) and (schedule[1].time_off != 0)) {
+      if ((secs_day() == schedule[1].time_on) and (secs_day() != current_second)) {
+        write_log(F("It's time: PIN2=1"));
+        switchpin(_PIN2, 1);
+        mqttClient.publish(String(_HOSTNAME + "/set/pin2").c_str(), 0, true, String(digitalRead(_PIN2)).c_str());
+        mqttClient.publish(String(_HOSTNAME + "/status/pin2").c_str(), 0, true, String(digitalRead(_PIN2)).c_str());
+        send_msg(String("Scheduler, PIN2=" + String(digitalRead(_PIN2))));
+        Serial.println();
+        Serial.println(F("It's time: PIN2=1"));
+      }
+      if ((secs_day() == schedule[1].time_off) and (secs_day() != current_second)) {
+        write_log(F("It's time: PIN2=0"));
+        switchpin(_PIN2, 0);
+        mqttClient.publish(String(_HOSTNAME + "/set/pin2").c_str(), 0, true, String(digitalRead(_PIN2)).c_str());
+        mqttClient.publish(String(_HOSTNAME + "/status/pin2").c_str(), 0, true, String(digitalRead(_PIN2)).c_str());
+        send_msg(String("Scheduler, PIN2=" + String(digitalRead(_PIN2))));
+        Serial.println();
+        Serial.println(F("It's time: PIN2=0"));
       }
     }
   }
@@ -477,19 +566,21 @@ void loop() {
     Serial.print(c);
     if (c == '1') {
       (digitalRead(_PIN1) == 0) ? (switchpin(_PIN1, 1)) : (switchpin(_PIN1, 0));
-      mqttClient.publish(String(_HOSTNAME + "/set/pin1").c_str(), 1, true, String(digitalRead(_PIN1)).c_str());
-      mqttClient.publish(String(_HOSTNAME + "/status/pin1").c_str(), 1, true, String(digitalRead(_PIN1)).c_str());
+      mqttClient.publish(String(_HOSTNAME + "/set/pin1").c_str(), 0, true, String(digitalRead(_PIN1)).c_str());
+      mqttClient.publish(String(_HOSTNAME + "/status/pin1").c_str(), 0, true, String(digitalRead(_PIN1)).c_str());
       Serial.print(F("PIN1 set to "));
       Serial.println(digitalRead(_PIN1));
       send_msg(String("Serial, PIN1=" + String(digitalRead(_PIN1))));
+      write_log(F("Serial switch."));
     }
     if (c == '2') {
       (digitalRead(_PIN2) == 0) ? (switchpin(_PIN2, 1)) : (switchpin(_PIN2, 0));
-      mqttClient.publish(String(_HOSTNAME + "/set/pin2").c_str(), 1, true, String(digitalRead(_PIN2)).c_str());
-      mqttClient.publish(String(_HOSTNAME + "/status/pin2").c_str(), 1, true, String(digitalRead(_PIN2)).c_str());
+      mqttClient.publish(String(_HOSTNAME + "/set/pin2").c_str(), 0, true, String(digitalRead(_PIN2)).c_str());
+      mqttClient.publish(String(_HOSTNAME + "/status/pin2").c_str(), 0, true, String(digitalRead(_PIN2)).c_str());
       Serial.print(F("PIN2 set to "));
       Serial.println(digitalRead(_PIN2));
       send_msg(String("Serial, PIN2=" + String(digitalRead(_PIN2))));
+      write_log(F("Serial switch."));
     }
     if (c == '\r') {
       Serial.println();
@@ -498,6 +589,17 @@ void loop() {
         Serial.println(F("w\t- Wifi scan"));
         Serial.println(F("msg\t- Send test email message"));
         Serial.println(F("reset\t- Factory reset"));
+        Serial.println();
+        Serial.print(F("IP: "));
+        Serial.println(WiFi.localIP().toString());
+        Serial.print(F("scheduler:\t PIN1 On:"));
+        Serial.print(schedule[0].time_on);
+        Serial.print(F(", Off:"));
+        Serial.print(schedule[0].time_off);
+        Serial.print(F("; PIN2 On:"));
+        Serial.print(schedule[1].time_on);
+        Serial.print(F(", Off:"));
+        Serial.println(schedule[1].time_off);
       }
       if (code == "w") {
         Serial.println(F("Scanning for wifi networks..."));
@@ -527,11 +629,24 @@ void loop() {
         send_msg("hello world!");
       }
       Serial.print(_HOSTNAME);
+      Serial.print("[");
+      Serial.print(secs_day());
+      Serial.print("]");
       Serial.print(">");
       code = "";
     } else
       code += c;
   }
+  //switch management
+  if (digitalRead(_PIN_RESET) == 0) {
+    if (switch_moment == 0) switch_moment = millis();
+    switch_hold_time = millis() - switch_moment;
+  } else {
+    switch_hold_time = 0;
+    switch_moment = 0;
+  }
   watchdog_counter = 0;
+  //Записва текущата секунда, за да открие преминаването към следващата - необходимо за графика
+  current_second = secs_day();
   yield();
 }
