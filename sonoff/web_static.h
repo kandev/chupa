@@ -98,6 +98,22 @@ fieldset legend {
   color: #ffd500;
   font-weight: bold;
 }
+.button {
+  color: #aaa;
+  background-color: #333;
+  border: 1px solid #aaa;
+  border-radius: 4px;
+  padding: 0px;
+  padding-left: 20px;
+  padding-right: 20px;
+  font-weight: bold;
+  margin: 5px;
+  height: 20px;
+  width: 110px;
+}
+.button:hover {
+  border: 1px solid #fff;
+}
 .gpio_off {
   color: #aaa;
   background-color: #000;
@@ -108,10 +124,11 @@ fieldset legend {
   padding-right: 20px;
   font-weight: bold;
   margin: 5px;
+  width: 110px;
 }
 .gpio_on {
-  color: #000;
-  background-color: #aaa;
+  color: #fff;
+  background-color: #ff0000;
   border: 1px solid #000;
   border-radius: 4px;
   padding: 4px;
@@ -119,6 +136,7 @@ fieldset legend {
   padding-right: 20px;
   font-weight: bold;
   margin: 5px;
+  width: 110px;
 }
 .gpio_on:hover {
   border: 1px solid #fff;
@@ -192,7 +210,7 @@ fieldset legend {
 
   <fieldset style="height:180px;">
   <legend>Daily schedule</legend>
-  <label><span style="width:40px;margin-left:2px;">ON [HH:MM]</span><span style="width:40px;margin-left:32px;">OFF [HH:MM]</span><span style="width:40px;margin-left:26px;">Output</span></label><br>
+  <label><span style="width:40px;margin-left:2px;">ON [HH:MM]</span><span style="width:40px;margin-left:34px;">OFF [HH:MM]</span></label><br>
   <input type="number" min="0" max="23" name="sched1_h_on" id="sched1_h_on" class="sched" style="margin-right:-2px;">
   <input type="number" min="0" max="59" name="sched1_m_on" id="sched1_m_on" class="sched" style="margin-left:-2px;">
   <input type="number" min="0" max="23" name="sched1_h_off" id="sched1_h_off" class="sched" style="margin-right:-2px;">
@@ -205,9 +223,12 @@ fieldset legend {
   </fieldset>
 
   <fieldset style="height:180px;">
-  <legend>Output Control</legend>
+  <legend>Controls</legend>
   <input type="button" class="gpio_off" name="pin1" id="pin1" value="Output 1" onclick="switch_pin(this.id);"><br>
   <input type="button" class="gpio_off" name="pin2" id="pin2" value="Output 2" onclick="switch_pin(this.id);"><br>
+  <input type="button" class="button" name="btn_syslog" id="btn_syslog" value="Syslog" onclick="button_click(this.id);"><br>
+  <input type="button" class="button" name="btn_syslog_delete" id="btn_syslog_delete" value="Erase log" onclick="button_click(this.id);"><br>
+  <input type="button" class="button" name="btn_restart" id="btn_restart" value="Restart" onclick="button_click(this.id);"><br>
   </fieldset>
 
   <fieldset style="border: solid 1px #11ff00; height:180px;">
@@ -418,6 +439,18 @@ fieldset legend {
     xhttp.setRequestHeader("Content-type", "application/x-www-form-urlencoded");
     xhttp.send(params);
   }
+
+  function button_click(btn) {
+    if (btn == 'btn_restart') {
+      window.location.href = "/reboot";
+    }
+    if (btn == 'btn_syslog') {
+      window.location.href = "/syslog";
+    }
+    if (btn == 'btn_syslog_delete') {
+      window.location.href = "/syslog_delete";
+    }
+  }
   </script>
 <div style="position: fixed; bottom: 0; width: 100%; text-align: right;">
 &copy; <a class="cc" href="http://kandev.com" title="kandev.com" target="_blank">kandev.com</a>
@@ -596,6 +629,7 @@ void handle_configure() {
   } else {
     server.send(200, F("text/plain"), F("[ERR]"));
   }
+  write_log(F("Configuraton saved."));
   if ((newssid) && (newpass)) ESP.restart();
 }
 
